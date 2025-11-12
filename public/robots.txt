@@ -1,0 +1,96 @@
+# robots.txt for EnigmaKeep Password Manager
+# https://www.enigmakeep.com
+
+User-agent: *
+Allow: /
+Allow: /privacy
+Allow: /terms
+Allow: /security
+Allow: /docs
+Allow: /pwa-guide
+
+# Explicit AI crawler permissions
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: CCBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+User-agent: BingPreview
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
+
+# General AI assistant crawlers
+User-agent: PerplexityBot
+Allow: /
+
+# Emerging AI research crawlers
+User-agent: NewsNowBot
+Allow: /
+
+# Don't index the app itself (it's private user data)
+Disallow: /app
+
+# Sitemap
+Sitemap: https://www.enigmakeep.com/sitemap.xml
+
+# Crawl delay (be nice to our servers)
+Crawl-delay: 1
+
+# Popular search engines
+User-agent: Googlebot
+Allow: /
+Disallow: /app
+
+User-agent: Bingbot
+Allow: /
+Disallow: /app
+
+User-agent: Slurp
+Allow: /
+Disallow: /app
+
+User-agent: DuckDuckBot
+Allow: /
+Disallow: /app
+
+User-agent: Baiduspider
+Allow: /
+Disallow: /app
+
+User-agent: YandexBot
+Allow: /
+Disallow: /app
+
+# Block AI scrapers (optional - uncomment if desired)
+# User-agent: GPTBot
+# Disallow: /
+
+# User-agent: ChatGPT-User
+# Disallow: /
+
+# User-agent: CCBot
+# Disallow: /
+
+# User-agent: anthropic-ai
+# Disallow: /
+
+# User-agent: Claude-Web
+# Disallow: /
