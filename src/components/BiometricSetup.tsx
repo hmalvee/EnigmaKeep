@@ -52,8 +52,8 @@ export function BiometricSetup({ username, onComplete }: BiometricSetupProps) {
     }
   };
 
-  const handleDisableBiometric = () => {
-    disableBiometric();
+  const handleDisableBiometric = async () => {
+    await disableBiometric();
     setIsEnabled(false);
     setSuccess('Biometric authentication disabled');
     setTimeout(() => setSuccess(''), 2000);

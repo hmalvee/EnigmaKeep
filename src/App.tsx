@@ -36,7 +36,7 @@ import { TotpExportModal } from './components/TotpExportModal';
 import { useAutoLock } from './hooks/useAutoLock';
 import { generateRecoveryPhrase, deriveKeyFromRecoveryPhrase, splitPhraseIntoWords } from './crypto/recoveryPhrase';
 import { saveLastVaultPath, getLastVaultPath, saveLastVaultHandle } from './utils/vaultStorage';
-import { isBiometricEnabled, updateBiometricVaultData } from './utils/biometric';
+import { isBiometricEnabled, updateBiometricVaultData, decryptBiometricPassword } from './utils/biometric';
 import { LoadingScreen } from './components/LoadingScreen';
 
 const LandingPage = lazy(() => import('./pages/LandingPage').then(module => ({ default: module.LandingPage })));
@@ -269,17 +269,21 @@ function App() {
   };
 
   const handleBiometricLoginSuccess = async () => {
-    const storedPassword = localStorage.getItem('vault_password_encrypted');
     const storedVaultData = localStorage.getItem('vault_file_data');
 
-    if (!storedPassword || !storedVaultData) {
+    if (!storedVaultData) {
       setError('No saved credentials. Please login with master password first.');
       setTimeout(() => setError(''), 3000);
       return;
     }
 
     try {
-      const password = atob(storedPassword);
+      const password = await decryptBiometricPassword();
+      if (!password) {
+        setError('No saved credentials. Please login with master password first.');
+        setTimeout(() => setError(''), 3000);
+        return;
+      }
       const vaultData = JSON.parse(storedVaultData);
       const file = new File([vaultData.content], vaultData.name, { type: 'application/octet-stream' });
 
@@ -293,8 +297,7 @@ function App() {
   const saveBiometricVaultData = async (password: string, file: File) => {
     try {
       const fileContent = await file.text();
-      localStorage.setItem('vault_password_encrypted', btoa(password));
-      localStorage.setItem('vault_file_data', JSON.stringify({ name: file.name, content: fileContent }));
+      await updateBiometricVaultData(password, fileContent, file.name);
     } catch (err) {
       console.error('Failed to save biometric vault data:', err);
     }
@@ -726,8 +729,7 @@ function App() {
       if (isBiometricEnabled()) {
         const blob = await encryptVault(vault, newPassword);
         const vaultData = await blob.text();
-        localStorage.setItem('vault_password_encrypted', btoa(newPassword));
-        localStorage.setItem('vault_file_data', JSON.stringify({ name: fileHandle.name, content: vaultData }));
+        await updateBiometricVaultData(newPassword, vaultData, fileHandle.name);
       }
     }
   };
@@ -736,8 +738,7 @@ function App() {
     if (vault && masterPassword && fileHandle) {
       const blob = await encryptVault(vault, masterPassword);
       const vaultData = await blob.text();
-      localStorage.setItem('vault_password_encrypted', btoa(masterPassword));
-      localStorage.setItem('vault_file_data', JSON.stringify({ name: fileHandle.name, content: vaultData }));
+      await updateBiometricVaultData(masterPassword, vaultData, fileHandle.name);
     }
   };
 
