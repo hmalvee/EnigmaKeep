@@ -187,10 +187,7 @@ async function encryptForBiometric(plaintext: string): Promise<string> {
   const combined = new Uint8Array(iv.length + ciphertext.byteLength);
   combined.set(iv);
   combined.set(new Uint8Array(ciphertext), iv.length);
-  let binary = '';
-  for (let i = 0; i < combined.length; i++) {
-    binary += String.fromCharCode(combined[i]);
-  }
+  const binary = String.fromCharCode(...combined);
   return btoa(binary);
 }
 

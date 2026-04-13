@@ -272,7 +272,7 @@ function App() {
     const storedVaultData = localStorage.getItem('vault_file_data');
 
     if (!storedVaultData) {
-      setError('No saved credentials. Please login with master password first.');
+      setError('No saved vault data. Please login with master password first.');
       setTimeout(() => setError(''), 3000);
       return;
     }
@@ -280,7 +280,7 @@ function App() {
     try {
       const password = await decryptBiometricPassword();
       if (!password) {
-        setError('No saved credentials. Please login with master password first.');
+        setError('No saved credentials found. Please login with master password to re-enable biometric.');
         setTimeout(() => setError(''), 3000);
         return;
       }
@@ -289,7 +289,11 @@ function App() {
 
       await handleLoginWithPassword(password, file, null);
     } catch (err: any) {
-      setError('Biometric login failed. Please use master password.');
+      if (err.message?.includes('decrypt') || err.name === 'OperationError') {
+        setError('Biometric credential decryption failed. Please login with master password.');
+      } else {
+        setError('Biometric login failed. Please use master password.');
+      }
       setTimeout(() => setError(''), 3000);
     }
   };
