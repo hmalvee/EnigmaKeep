@@ -138,38 +138,40 @@ async function openBiometricKeyDB(): Promise<IDBDatabase> {
 async function getOrCreateBiometricKey(): Promise<CryptoKey> {
   const db = await openBiometricKeyDB();
 
-  // Try to retrieve existing key
-  const existingKey = await new Promise<CryptoKey | undefined>((resolve, reject) => {
-    const tx = db.transaction(BIOMETRIC_STORE_NAME, 'readonly');
-    const store = tx.objectStore(BIOMETRIC_STORE_NAME);
-    const request = store.get(BIOMETRIC_KEY_ID);
-    request.onsuccess = () => resolve(request.result as CryptoKey | undefined);
-    request.onerror = () => reject(request.error);
-  });
+  try {
+    // Try to retrieve existing key
+    const existingKey = await new Promise<CryptoKey | undefined>((resolve, reject) => {
+      const tx = db.transaction(BIOMETRIC_STORE_NAME, 'readonly');
+      const store = tx.objectStore(BIOMETRIC_STORE_NAME);
+      const request = store.get(BIOMETRIC_KEY_ID);
+      request.onsuccess = () => resolve(request.result as CryptoKey | undefined);
+      request.onerror = () => reject(request.error);
+    });
 
-  if (existingKey) {
+    if (existingKey) {
+      return existingKey;
+    }
+
+    // Generate a new AES-GCM key (non-exportable)
+    const key = await crypto.subtle.generateKey(
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+
+    // Store the key in IndexedDB
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(BIOMETRIC_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(BIOMETRIC_STORE_NAME);
+      const request = store.put(key, BIOMETRIC_KEY_ID);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+
+    return key;
+  } finally {
     db.close();
-    return existingKey;
   }
-
-  // Generate a new AES-GCM key (non-exportable)
-  const key = await crypto.subtle.generateKey(
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  );
-
-  // Store the key in IndexedDB
-  await new Promise<void>((resolve, reject) => {
-    const tx = db.transaction(BIOMETRIC_STORE_NAME, 'readwrite');
-    const store = tx.objectStore(BIOMETRIC_STORE_NAME);
-    const request = store.put(key, BIOMETRIC_KEY_ID);
-    request.onsuccess = () => resolve();
-    request.onerror = () => reject(request.error);
-  });
-
-  db.close();
-  return key;
 }
 
 async function encryptForBiometric(plaintext: string): Promise<string> {
