@@ -17,21 +17,33 @@ export function Sidebar({ currentView, onViewChange, passwordCount, noteCount, t
       icon: Lock,
       label: 'Passwords',
       count: passwordCount,
-      color: 'cyan'
+      activeColor: 'from-neon-cyan to-neon-blue',
+      activeBg: 'bg-neon-cyan/10',
+      activeText: 'text-neon-cyan',
+      activeBorder: 'border-neon-cyan/30',
+      glowColor: 'shadow-[0_0_15px_rgba(0,240,255,0.15)]'
     },
     {
       id: 'totp' as const,
       icon: Shield,
       label: '2FA Codes',
       count: totpCount,
-      color: 'blue'
+      activeColor: 'from-neon-blue to-neon-purple',
+      activeBg: 'bg-neon-blue/10',
+      activeText: 'text-neon-blue',
+      activeBorder: 'border-neon-blue/30',
+      glowColor: 'shadow-[0_0_15px_rgba(77,124,255,0.15)]'
     },
     {
       id: 'notes' as const,
       icon: FileText,
       label: 'Notes',
       count: noteCount,
-      color: 'emerald'
+      activeColor: 'from-neon-green to-emerald-500',
+      activeBg: 'bg-neon-green/10',
+      activeText: 'text-neon-green',
+      activeBorder: 'border-neon-green/30',
+      glowColor: 'shadow-[0_0_15px_rgba(16,185,129,0.15)]'
     }
   ];
 
@@ -47,7 +59,7 @@ export function Sidebar({ currentView, onViewChange, passwordCount, noteCount, t
       {/* Overlay for mobile */}
       {isOpen && onClose && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 md:hidden"
           onClick={onClose}
         />
       )}
@@ -55,27 +67,27 @@ export function Sidebar({ currentView, onViewChange, passwordCount, noteCount, t
       {/* Sidebar */}
       <aside className={`
         fixed md:static inset-y-0 left-0 z-50
-        w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
+        w-64 bg-vault-surface/95 backdrop-blur-xl border-r border-vault-border
         flex flex-col
         transform transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
       `}>
         {/* Logo/Header */}
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+        <div className="p-6 border-b border-vault-border">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-purple-600 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-xl">E</span>
+              <div className="w-10 h-10 bg-gradient-to-br from-neon-cyan to-neon-blue rounded-xl flex items-center justify-center shadow-neon-cyan">
+                <span className="text-white font-black text-lg">E</span>
               </div>
               <div>
-                <h2 className="font-bold text-gray-900 dark:text-white">EnigmaKeep</h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Your Vault</p>
+                <h2 className="font-bold text-white tracking-tight">EnigmaKeep</h2>
+                <p className="text-xs text-neon-cyan/60 font-mono">VAULT ACTIVE</p>
               </div>
             </div>
             {onClose && (
               <button
                 onClick={onClose}
-                className="md:hidden text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                className="md:hidden text-gray-500 hover:text-white transition-colors"
               >
                 <X size={24} />
               </button>
@@ -89,29 +101,26 @@ export function Sidebar({ currentView, onViewChange, passwordCount, noteCount, t
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentView === item.id;
-              const colorClasses = {
-                cyan: isActive
-                  ? 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                blue: isActive
-                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                emerald: isActive
-                  ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-              };
 
               return (
                 <li key={item.id}>
                   <button
                     onClick={() => handleViewChange(item.id)}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${colorClasses[item.color]}`}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl transition-all duration-300 ${
+                      isActive
+                        ? `${item.activeBg} ${item.activeText} border ${item.activeBorder} ${item.glowColor}`
+                        : 'text-gray-400 hover:text-white hover:bg-vault-hover border border-transparent'
+                    }`}
                   >
                     <div className="flex items-center gap-3">
                       <Icon size={20} />
                       <span className="font-medium">{item.label}</span>
                     </div>
-                    <span className="text-sm font-semibold bg-white dark:bg-gray-800 px-2 py-1 rounded-md">
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-lg ${
+                      isActive
+                        ? `bg-gradient-to-r ${item.activeColor} text-white`
+                        : 'bg-vault-card text-gray-500'
+                    }`}>
                       {item.count}
                     </span>
                   </button>
@@ -121,13 +130,13 @@ export function Sidebar({ currentView, onViewChange, passwordCount, noteCount, t
           </ul>
 
           {/* Settings at bottom of nav */}
-          <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="mt-auto pt-4 border-t border-vault-border">
             <button
               onClick={() => handleViewChange('settings')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 ${
                 currentView === 'settings'
-                  ? 'bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
+                  ? 'bg-neon-purple/10 text-neon-purple border border-neon-purple/30 shadow-[0_0_15px_rgba(168,85,247,0.15)]'
+                  : 'text-gray-400 hover:text-white hover:bg-vault-hover border border-transparent'
               }`}
             >
               <Settings size={20} />

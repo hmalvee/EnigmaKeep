@@ -789,9 +789,9 @@ function App() {
 
   if (!cryptoReady) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-        <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl p-8 max-w-md w-full text-center animate-scaleIn">
-          <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 animate-pulse-soft">
+      <div className="min-h-screen bg-vault-dark flex items-center justify-center p-4">
+        <div className="glass-card p-8 max-w-md w-full text-center animate-scaleIn">
+          <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse-soft border border-red-500/20">
             <AlertTriangle className="text-red-400" size={32} />
           </div>
           <h1 className="text-2xl font-bold text-white mb-2">Security Error</h1>
@@ -807,24 +807,29 @@ function App() {
   if (isLocked || !vault) {
     if (mode === 'welcome') {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-          <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl p-8 max-w-2xl w-full animate-scaleIn">
+        <div className="min-h-screen bg-vault-dark flex items-center justify-center p-4 relative overflow-hidden">
+          {/* Background effects */}
+          <div className="absolute inset-0 ai-grid-bg opacity-20" />
+          <div className="absolute top-1/4 left-1/4 w-[400px] h-[400px] bg-neon-cyan/5 rounded-full blur-[120px]" />
+          <div className="absolute bottom-1/4 right-1/4 w-[300px] h-[300px] bg-neon-purple/5 rounded-full blur-[100px]" />
+
+          <div className="glass-card p-8 max-w-2xl w-full animate-scaleIn relative z-10">
             <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 rounded-2xl mb-4 shadow-lg border border-cyan-500/30">
-                <Lock className="text-cyan-400" size={36} />
+              <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-neon-cyan/20 to-neon-blue/20 rounded-2xl mb-4 shadow-neon-cyan border border-neon-cyan/20 animate-glow-pulse">
+                <Lock className="text-neon-cyan" size={36} />
               </div>
-              <h1 className="text-3xl font-bold text-white mb-2">EnigmaKeep</h1>
-              <p className="text-gray-400">Your Digital Fortress</p>
+              <h1 className="text-3xl font-black text-white mb-2 tracking-tight">EnigmaKeep</h1>
+              <p className="text-sm neon-text font-medium">AI-Powered Digital Fortress</p>
             </div>
 
             <div className="grid md:grid-cols-2 gap-4">
               <button
                 onClick={() => setMode('open')}
-                className="p-6 border-2 border-gray-700 rounded-xl hover:border-cyan-500 hover:bg-gray-700/50 transition-all duration-200 group"
+                className="p-6 glass-card hover:border-neon-cyan/40 transition-all duration-300 group card-3d"
               >
                 <div className="flex flex-col items-center text-center">
-                  <div className="w-16 h-16 bg-gradient-to-br from-cyan-500/20 to-blue-500/20 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-200 border border-cyan-500/30">
-                    <Upload className="text-cyan-400" size={28} />
+                  <div className="w-16 h-16 bg-gradient-to-br from-neon-cyan/20 to-neon-blue/20 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-all duration-300 border border-neon-cyan/20 group-hover:shadow-neon-cyan">
+                    <Upload className="text-neon-cyan" size={28} />
                   </div>
                   <h3 className="font-bold text-white mb-2">Open Vault</h3>
                   <p className="text-sm text-gray-400">Access your existing password vault</p>
@@ -833,11 +838,11 @@ function App() {
 
               <button
                 onClick={() => setMode('create')}
-                className="p-6 border-2 border-gray-700 rounded-xl hover:border-emerald-500 hover:bg-gray-700/50 transition-all duration-200 group"
+                className="p-6 glass-card hover:border-neon-green/40 transition-all duration-300 group card-3d"
               >
                 <div className="flex flex-col items-center text-center">
-                  <div className="w-16 h-16 bg-gradient-to-br from-emerald-500/20 to-teal-500/20 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-200 border border-emerald-500/30">
-                    <Plus className="text-emerald-400" size={28} />
+                  <div className="w-16 h-16 bg-gradient-to-br from-neon-green/20 to-emerald-500/20 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-all duration-300 border border-neon-green/20 group-hover:shadow-[0_0_20px_rgba(16,185,129,0.3)]">
+                    <Plus className="text-neon-green" size={28} />
                   </div>
                   <h3 className="font-bold text-white mb-2">Create Vault</h3>
                   <p className="text-sm text-gray-400">Set up a new secure password vault</p>
@@ -845,10 +850,9 @@ function App() {
               </button>
           </div>
 
-            <div className="mt-8 pt-6 border-t border-gray-700 text-center">
-              <p className="text-xs text-gray-500">
-                All data is encrypted locally using AES-GCM.<br />
-                No data is sent to any server.
+            <div className="mt-8 pt-6 border-t border-vault-border text-center">
+              <p className="text-xs text-gray-500 font-mono tracking-wide">
+                AES-256-GCM • PBKDF2 600K • ZERO KNOWLEDGE
               </p>
             </div>
           </div>
@@ -859,8 +863,10 @@ function App() {
 
     if (mode === 'create') {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-          <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl p-8 animate-scaleIn">
+        <div className="min-h-screen bg-vault-dark flex items-center justify-center p-4 relative overflow-hidden">
+          <div className="absolute inset-0 ai-grid-bg opacity-20" />
+          <div className="absolute top-1/3 right-1/4 w-[300px] h-[300px] bg-neon-cyan/5 rounded-full blur-[100px]" />
+          <div className="glass-card p-8 animate-scaleIn relative z-10">
             <CreateVaultFlow
               onComplete={handleCreateVaultComplete}
               onCancel={() => setMode('welcome')}
@@ -874,8 +880,10 @@ function App() {
 
     if (mode === 'open') {
       return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center p-4">
-          <div className="bg-gray-800 border border-gray-700 rounded-2xl shadow-2xl p-8 animate-scaleIn w-full max-w-md">
+        <div className="min-h-screen bg-vault-dark flex items-center justify-center p-4 relative overflow-hidden">
+          <div className="absolute inset-0 ai-grid-bg opacity-20" />
+          <div className="absolute bottom-1/3 left-1/4 w-[300px] h-[300px] bg-neon-blue/5 rounded-full blur-[100px]" />
+          <div className="glass-card p-8 animate-scaleIn w-full max-w-md relative z-10">
             <LoginScreen
               onLogin={handleLoginWithPassword}
               onRecoverWithSeedPhrase={handleRecoverWithSeedPhrase}
@@ -886,7 +894,7 @@ function App() {
             <div className="mt-6 text-center">
               <button
                 onClick={() => setMode('welcome')}
-                className="text-sm text-gray-400 hover:text-white transition-colors"
+                className="text-sm text-gray-400 hover:text-neon-cyan transition-colors"
               >
                 ← Back to Home
               </button>
@@ -902,7 +910,7 @@ function App() {
 
   // Vault app main UI
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-gray-100 to-gray-50 dark:from-gray-900 dark:via-gray-800 dark:to-gray-900 flex">
+    <div className="min-h-screen bg-vault-dark flex">
       {/* Sidebar */}
       <Sidebar
         currentView={currentView}
@@ -917,17 +925,17 @@ function App() {
       {/* Main Content */}
       <div className="flex-1 flex flex-col">
         {/* Top Bar */}
-        <header className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-md border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40 shadow-sm">
+        <header className="bg-vault-surface/90 backdrop-blur-xl border-b border-vault-border sticky top-0 z-40">
           <div className="px-6 py-4 flex items-center justify-between">
             <div className="flex items-center gap-4">
               <button
                 onClick={() => setIsSidebarOpen(true)}
-                className="md:hidden text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
+                className="md:hidden text-gray-400 hover:text-white transition-colors"
                 aria-label="Open menu"
               >
                 <Menu size={24} />
               </button>
-              <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+              <h1 className="text-xl font-bold text-white tracking-tight">
                 {currentView === 'passwords' ? 'Passwords' : currentView === 'notes' ? 'Notes' : currentView === 'totp' ? '2FA Codes' : 'Settings'}
               </h1>
             </div>
@@ -935,14 +943,14 @@ function App() {
               <ThemeToggle />
               <button
                 onClick={handleSaveVault}
-                className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-lg transition-all duration-200 flex items-center gap-2 font-medium shadow-md hover:shadow-lg"
+                className="px-4 py-2 bg-gradient-to-r from-neon-green to-emerald-600 hover:from-neon-green/90 hover:to-emerald-500 text-white rounded-xl transition-all duration-300 flex items-center gap-2 font-medium shadow-[0_0_15px_rgba(16,185,129,0.2)] hover:shadow-[0_0_25px_rgba(16,185,129,0.3)]"
               >
                 <Download size={16} />
                 Save
               </button>
               <button
                 onClick={handleLock}
-                className="px-4 py-2 border-2 border-gray-300 dark:border-gray-700 text-violet-600 dark:text-violet-400 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 flex items-center gap-2 font-medium"
+                className="px-4 py-2 border border-neon-purple/30 text-neon-purple rounded-xl hover:bg-neon-purple/10 transition-all duration-300 flex items-center gap-2 font-medium"
               >
                 <Lock size={16} />
                 Lock
@@ -954,7 +962,7 @@ function App() {
         {/* Success/Error Messages */}
         {success && (
           <div className="px-6 py-4">
-            <div className="p-4 bg-gradient-to-r from-emerald-500/20 to-teal-500/20 border border-emerald-500/30 rounded-xl text-emerald-700 dark:text-emerald-400 text-sm font-medium shadow-sm animate-slideIn">
+            <div className="p-4 bg-neon-green/10 border border-neon-green/20 rounded-xl text-neon-green text-sm font-medium animate-slideIn backdrop-blur-sm">
               {success}
             </div>
           </div>
@@ -962,7 +970,7 @@ function App() {
 
         {error && (
           <div className="px-6 py-4">
-            <div className="p-4 bg-gradient-to-r from-red-500/20 to-rose-500/20 border border-red-500/30 rounded-xl text-red-700 dark:text-red-400 text-sm font-medium shadow-sm animate-slideIn">
+            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm font-medium animate-slideIn backdrop-blur-sm">
               {error}
             </div>
           </div>
@@ -1078,13 +1086,13 @@ function App() {
           <div className="flex-1 overflow-auto p-6">
             <div className="mb-6 flex gap-3">
               <div className="flex-1 relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-cyan-500" size={20} />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-neon-cyan" size={20} />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Search passwords..."
-                  className="w-full pl-12 pr-4 py-3 border-2 border-gray-300 dark:border-gray-700 rounded-xl focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-200 bg-white dark:bg-gray-800 text-gray-900 dark:text-white placeholder-gray-500"
+                  className="w-full pl-12 pr-4 py-3 ai-input"
                 />
               </div>
               <button

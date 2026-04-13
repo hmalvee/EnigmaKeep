@@ -152,22 +152,22 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
   return (
     <div className="w-full max-w-md">
       <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-white mb-2">Open Existing Vault</h2>
-        <p className="text-gray-400">Unlock your password vault</p>
+        <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">Open Existing Vault</h2>
+        <p className="text-gray-400">Unlock your encrypted password vault</p>
       </div>
 
       {error && (
-        <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-400 text-sm animate-slideIn">
+        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm animate-slideIn backdrop-blur-sm">
           {error}
         </div>
       )}
 
-      <div className="flex gap-2 mb-6 bg-gray-800 rounded-lg p-1">
+      <div className="flex gap-2 mb-6 bg-vault-surface rounded-xl p-1 border border-vault-border">
         <button
           onClick={() => setMode('password')}
-          className={`flex-1 py-2 px-4 rounded-md font-medium transition-all duration-200 ${
+          className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all duration-300 ${
             mode === 'password'
-              ? 'bg-cyan-600 text-white shadow-sm'
+              ? 'bg-gradient-to-r from-neon-cyan to-neon-blue text-white shadow-neon-cyan'
               : 'text-gray-400 hover:text-white'
           }`}
         >
@@ -175,9 +175,9 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
         </button>
         <button
           onClick={() => setMode('recovery')}
-          className={`flex-1 py-2 px-4 rounded-md font-medium transition-all duration-200 flex items-center justify-center gap-2 ${
+          className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all duration-300 flex items-center justify-center gap-2 ${
             mode === 'recovery'
-              ? 'bg-cyan-600 text-white shadow-sm'
+              ? 'bg-gradient-to-r from-neon-cyan to-neon-blue text-white shadow-neon-cyan'
               : 'text-gray-400 hover:text-white'
           }`}
         >
@@ -195,7 +195,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
             <button
               onClick={handleFileSelect}
               disabled={isAutoLoading}
-              className="w-full px-4 py-3 border-2 border-dashed border-gray-600 hover:border-cyan-500 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-gray-300 hover:text-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 border-2 border-dashed border-vault-border hover:border-neon-cyan/50 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 text-gray-300 hover:text-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed bg-vault-dark/50"
             >
               {isAutoLoading ? (
                 <>
@@ -213,13 +213,13 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
               <p className="text-xs text-gray-500 mt-1">Last used: {lastVaultPath}</p>
             )}
             {selectedFile && (
-              <p className="text-xs text-emerald-500 mt-1 flex items-center gap-1">
+              <p className="text-xs text-neon-green mt-1 flex items-center gap-1">
                 <RefreshCw size={12} />
                 Vault file loaded automatically
               </p>
             )}
             {autoLoadError && (
-              <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">
+              <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
                 <AlertCircle size={12} />
                 {autoLoadError}
               </p>
@@ -235,7 +235,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handlePasswordLogin()}
-              className="w-full px-4 py-3 border border-gray-600 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-200 bg-gray-900 text-white placeholder-gray-500"
+              className="ai-input"
               placeholder="Enter your master password"
             />
           </div>
@@ -243,7 +243,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
           <button
             onClick={handlePasswordLogin}
             disabled={!password || !selectedFile || isLoading}
-            className="w-full px-4 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 disabled:from-gray-300 disabled:to-gray-300 text-white rounded-lg transition-all duration-200 font-medium shadow-md hover:shadow-lg disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full ai-button-primary !py-3 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:transform-none flex items-center justify-center gap-2"
           >
             {isLoading ? (
               <>
@@ -259,17 +259,17 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
             <>
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-700"></div>
+                  <div className="w-full section-divider"></div>
                 </div>
                 <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-gray-800 text-gray-400">or</span>
+                  <span className="px-4 bg-vault-card text-gray-500 rounded-full">or</span>
                 </div>
               </div>
 
               <button
                 onClick={handleBiometricAuth}
                 disabled={isBiometricLoading}
-                className="w-full px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:from-gray-300 disabled:to-gray-300 text-white rounded-lg transition-all duration-200 font-medium shadow-md hover:shadow-lg disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="w-full px-4 py-3 bg-gradient-to-r from-neon-green to-emerald-600 hover:from-neon-green/90 hover:to-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-300 font-medium shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2"
               >
                 {isBiometricLoading ? (
                   <>
@@ -295,7 +295,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
             <button
               onClick={handleFileSelect}
               disabled={isAutoLoading}
-              className="w-full px-4 py-3 border-2 border-dashed border-gray-600 hover:border-cyan-500 rounded-lg transition-all duration-200 flex items-center justify-center gap-2 text-gray-300 hover:text-cyan-400 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full px-4 py-3 border-2 border-dashed border-vault-border hover:border-neon-cyan/50 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 text-gray-300 hover:text-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed bg-vault-dark/50"
             >
               {isAutoLoading ? (
                 <>
@@ -313,13 +313,13 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
               <p className="text-xs text-gray-500 mt-1">Last used: {lastVaultPath}</p>
             )}
             {selectedFile && (
-              <p className="text-xs text-emerald-500 mt-1 flex items-center gap-1">
+              <p className="text-xs text-neon-green mt-1 flex items-center gap-1">
                 <RefreshCw size={12} />
                 Vault file loaded automatically
               </p>
             )}
             {autoLoadError && (
-              <p className="text-xs text-amber-500 mt-1 flex items-center gap-1">
+              <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
                 <AlertCircle size={12} />
                 {autoLoadError}
               </p>
@@ -338,14 +338,14 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
                 setPhraseWordCount(words.length);
               }}
               rows={3}
-              className="w-full px-4 py-3 border border-gray-600 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-200 font-mono text-sm resize-none bg-gray-900 text-white placeholder-gray-500"
+              className="ai-input font-mono text-sm resize-none"
               placeholder="Enter your 12-word recovery phrase..."
             />
             <p className="text-xs mt-1 text-gray-400">
-              Word count: <span className={phraseWordCount === 12 ? 'text-emerald-400 font-semibold' : 'text-gray-400'}>{phraseWordCount}</span> / 12
+              Word count: <span className={phraseWordCount === 12 ? 'text-neon-green font-semibold' : 'text-gray-400'}>{phraseWordCount}</span> / 12
             </p>
             {seedPhrase && phraseWordCount !== 12 && (
-              <p className="text-xs mt-1 text-amber-600">⚠ Recovery phrase should be exactly 12 words</p>
+              <p className="text-xs mt-1 text-amber-400">⚠ Recovery phrase should be exactly 12 words</p>
             )}
           </div>
 
@@ -357,7 +357,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-600 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-200 bg-gray-900 text-white placeholder-gray-500"
+              className="ai-input"
               placeholder="Create new master password"
             />
             {newPassword && <PasswordStrengthMeter password={newPassword} />}
@@ -371,7 +371,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full px-4 py-3 border border-gray-600 rounded-lg focus:ring-2 focus:ring-cyan-500 focus:border-cyan-500 transition-all duration-200 bg-gray-900 text-white placeholder-gray-500"
+              className="ai-input"
               placeholder="Confirm new password"
             />
           </div>
@@ -380,13 +380,13 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
             <p className="text-sm text-red-400">Passwords do not match</p>
           )}
           {newPassword && calculatePasswordStrength(newPassword).score < 3 && (
-            <p className="text-sm text-amber-500">⚠ Password should be stronger (at least 12 characters with uppercase, lowercase, numbers, and symbols)</p>
+            <p className="text-sm text-amber-400">⚠ Password should be stronger (at least 12 characters with uppercase, lowercase, numbers, and symbols)</p>
           )}
 
           <button
             onClick={handleRecoveryLogin}
             disabled={!seedPhrase || !newPassword || !confirmPassword || newPassword !== confirmPassword || calculatePasswordStrength(newPassword).score < 3 || !selectedFile || isLoading}
-            className="w-full px-4 py-3 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-700 hover:to-orange-700 disabled:from-gray-300 disabled:to-gray-300 text-white rounded-lg transition-all duration-200 font-medium shadow-md hover:shadow-lg disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-300 font-medium shadow-[0_0_20px_rgba(245,158,11,0.2)] hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2"
           >
             {isLoading ? (
               <>
