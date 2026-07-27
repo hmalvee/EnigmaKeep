@@ -52,10 +52,10 @@ export function NoteModal({ note, onSave, onClose }: NoteModalProps) {
 
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fadeIn">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden animate-scaleIn">
+      <div className="bg-surface border border-line rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden animate-scaleIn">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <div className="flex items-center justify-between p-6 border-b border-line">
+          <h2 className="text-2xl font-bold text-ink">
             {note ? 'Edit Note' : 'New Note'}
           </h2>
           <div className="flex items-center gap-2">
@@ -63,8 +63,8 @@ export function NoteModal({ note, onSave, onClose }: NoteModalProps) {
               onClick={() => setFavorite(!favorite)}
               className={`p-2 rounded-lg transition-colors ${
                 favorite
-                  ? 'text-yellow-500 hover:text-yellow-600'
-                  : 'text-gray-400 hover:text-yellow-500'
+                  ? 'text-accent hover:text-accent-2'
+                  : 'text-muted hover:text-accent'
               }`}
               title={favorite ? 'Remove from favorites' : 'Add to favorites'}
             >
@@ -72,7 +72,7 @@ export function NoteModal({ note, onSave, onClose }: NoteModalProps) {
             </button>
             <button
               onClick={onClose}
-              className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors text-gray-600 dark:text-gray-400"
+              className="p-2 hover:bg-surface2 rounded-lg transition-colors text-muted"
             >
               <X size={20} />
             </button>
@@ -84,7 +84,7 @@ export function NoteModal({ note, onSave, onClose }: NoteModalProps) {
           <div className="space-y-6">
             {/* Title */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-muted mb-2">
                 Title *
               </label>
               <input
@@ -92,14 +92,14 @@ export function NoteModal({ note, onSave, onClose }: NoteModalProps) {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Note title..."
-                className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500"
+                className="ai-input"
                 autoFocus
               />
             </div>
 
             {/* Content */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-muted mb-2">
                 Content
               </label>
               <textarea
@@ -107,13 +107,13 @@ export function NoteModal({ note, onSave, onClose }: NoteModalProps) {
                 onChange={(e) => setContent(e.target.value)}
                 placeholder="Write your note here..."
                 rows={12}
-                className="w-full px-4 py-3 border-2 border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 resize-none"
+                className="ai-input resize-none"
               />
             </div>
 
             {/* Tags */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              <label className="block text-sm font-medium text-muted mb-2">
                 Tags
               </label>
               <div className="flex gap-2 mb-3">
@@ -123,11 +123,11 @@ export function NoteModal({ note, onSave, onClose }: NoteModalProps) {
                   onChange={(e) => setTagInput(e.target.value)}
                   onKeyPress={handleKeyPress}
                   placeholder="Add a tag..."
-                  className="flex-1 px-4 py-2 border-2 border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all duration-200 bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500"
+                  className="ai-input flex-1"
                 />
                 <button
                   onClick={handleAddTag}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg transition-colors font-medium"
+                  className="px-4 py-2 bg-accent hover:bg-accent-2 text-accent-ink rounded-lg transition-colors font-medium"
                 >
                   Add
                 </button>
@@ -137,13 +137,13 @@ export function NoteModal({ note, onSave, onClose }: NoteModalProps) {
                   {tags.map((tag, index) => (
                     <span
                       key={index}
-                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 rounded-lg text-sm"
+                      className="inline-flex items-center gap-2 px-3 py-1.5 bg-accent/10 text-accent border border-accent/20 rounded-lg text-sm"
                     >
                       <TagIcon size={12} />
                       {tag}
                       <button
                         onClick={() => handleRemoveTag(tag)}
-                        className="hover:text-emerald-900 dark:hover:text-emerald-200"
+                        className="hover:text-accent-2"
                       >
                         <X size={14} />
                       </button>
@@ -156,16 +156,16 @@ export function NoteModal({ note, onSave, onClose }: NoteModalProps) {
         </div>
 
         {/* Footer */}
-        <div className="flex gap-3 p-6 border-t border-gray-200 dark:border-gray-700">
+        <div className="flex gap-3 p-6 border-t border-line">
           <button
             onClick={onClose}
-            className="flex-1 px-6 py-3 border-2 border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+            className="btn-ghost flex-1"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
-            className="flex-1 px-6 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl transition-all duration-200 flex items-center justify-center gap-2 font-medium shadow-md hover:shadow-lg"
+            className="btn-primary flex-1 gap-2"
           >
             <Save size={18} />
             Save Note

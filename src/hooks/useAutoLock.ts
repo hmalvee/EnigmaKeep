@@ -1,16 +1,34 @@
 import { useEffect, useRef } from 'react';
 
-export function useAutoLock(onLock: () => void, isLocked: boolean, timeout: number = 5 * 60 * 1000) {
+export interface AutoLockOptions {
+  idleTimeout?: number;
+  /** Lock when the tab becomes hidden (minimize / switch apps). Default false. */
+  lockOnHide?: boolean;
+}
+
+export function useAutoLock(
+  onLock: () => void,
+  isLocked: boolean,
+  options: AutoLockOptions | number = {}
+) {
+  // Back-compat: third arg used to be a bare timeout number.
+  const opts: AutoLockOptions =
+    typeof options === 'number' ? { idleTimeout: options } : options;
+
+  const idleTimeout = opts.idleTimeout ?? 5 * 60 * 1000;
+  const lockOnHide = opts.lockOnHide ?? false;
   const timeoutRef = useRef<number>();
+  const onLockRef = useRef(onLock);
+  onLockRef.current = onLock;
 
   const resetTimer = () => {
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
-    if (!isLocked) {
+    if (!isLocked && idleTimeout > 0) {
       timeoutRef.current = window.setTimeout(() => {
-        onLock();
-      }, timeout);
+        onLockRef.current();
+      }, idleTimeout);
     }
   };
 
@@ -22,15 +40,15 @@ export function useAutoLock(onLock: () => void, isLocked: boolean, timeout: numb
       return;
     }
 
-    const events = ['mousedown', 'keydown', 'scroll', 'touchstart'];
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'pointerdown'];
 
     events.forEach(event => {
-      document.addEventListener(event, resetTimer);
+      document.addEventListener(event, resetTimer, { passive: true });
     });
 
     const handleVisibilityChange = () => {
-      if (document.hidden) {
-        onLock();
+      if (document.hidden && lockOnHide) {
+        onLockRef.current();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
@@ -46,7 +64,7 @@ export function useAutoLock(onLock: () => void, isLocked: boolean, timeout: numb
       });
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [isLocked, onLock]);
+  }, [isLocked, idleTimeout, lockOnHide]);
 
   return resetTimer;
 }

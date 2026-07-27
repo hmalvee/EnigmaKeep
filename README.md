@@ -1,127 +1,116 @@
-# EnigmaKeep Documentation
+# EnigmaKeep
 
-EnigmaKeep is a 100% offline, zero-knowledge password manager. This document collects the key concepts, security guarantees, and operational guides for contributors and power users.
+Offline, zero-knowledge password manager. Your vault stays on your device — no accounts, no cloud sync, no telemetry.
 
-## Project Essentials
+**Maintainer:** [HM Alvee Hasan (@hmalvee)](https://github.com/hmalvee)  
+**Homepage:** [enigmakeep.com](https://enigmakeep.com/)  
+**Repository:** [github.com/hmalvee/EnigmaKeep](https://github.com/hmalvee/EnigmaKeep)  
+**License:** MIT
 
-- **Homepage:** https://enigmakeep.com/  
-- **Repository:** https://github.com/hmalvee/EnigmaKeep  
-- **License:** MIT  
-- **Maintainer:** HM Alvee Hasan ([@hmalvee](https://github.com/hmalvee))
+## Features
 
-## Feature Overview
+- **Offline-first** — no servers; nothing leaves the browser
+- **AES-256-GCM vault encryption** with PBKDF2 (600k iterations)
+- **Opaque binary vault files** (`.dat`) — high-entropy ciphertext only; no plaintext metadata banners
+- **Encrypted file manager** — folders, upload, preview, and edit inside the vault
+- **Biometric unlock** via WebAuthn / platform authenticators
+- **12-word BIP39 recovery phrase** with derived recovery key
+- **Built-in TOTP authenticator**, secure notes, categories
+- **Password generator** and strength meter
+- **Import / export** for common password managers (CSV / JSON)
+- **PWA** install for desktop and mobile
+- **Local encrypted snapshots** for recovery if a save fails
+- **Auto-lock**, unlock backoff, and secure clipboard clearing
 
-- **Offline-first architecture** – no servers, no telemetry, zero data leaving the device.
-- **Local AES-256-GCM encryption** driven by PBKDF2 (600k iterations) per vault.
-- **Built-in biometric unlock** using WebAuthn/FIDO2, with device-bound credentials.
-- **Integrated TOTP authenticator** for managing 2FA codes alongside credentials.
-- **Secure notes & categories** for organizing sensitive records.
-- **Password generator & strength meter** with entropy heuristics.
-- **Import/export pipeline** compatible with 1Password, LastPass, Bitwarden, Chrome, and Firefox.
-- **PWA distribution** with install prompts for desktop and mobile browsers.
+## Stack
 
-## Architecture Quick Reference
+| Area | Choice |
+|------|--------|
+| UI | React 18 + TypeScript |
+| Styling | Tailwind CSS |
+| Build | Vite + vite-plugin-pwa |
+| Crypto | Web Crypto API, BIP39 |
+| Storage | File System Access API, IndexedDB |
 
-- **Frontend:** React 18 + TypeScript 5
-- **Styling:** Tailwind CSS, custom gradients, dark-mode by default
-- **Build Tooling:** Vite, PostCSS, ESBuild, Workbox (for service worker)
-- **Crypto Utilities:** Web Crypto API, BIP39 (recovery phrases), custom vault manager
-- **State & Hooks:** Local React state, custom hooks for timers and auto-lock
-- **Storage Surface:** IndexedDB & LocalStorage for metadata, File System Access API (desktop) for vault backups
-
-## Security Model
+## Security model
 
 | Capability | Implementation |
 |------------|----------------|
 | Vault encryption | AES-256-GCM with random IVs |
 | Key derivation | PBKDF2 (600,000 iterations, SHA-256) |
-| Recovery phrase | 12-word BIP39 mnemonic → SHA-256 derived key (`EnigmaKeep-Recovery-Salt`) |
-| Biometric unlock | WebAuthn resident credential stored in device secure enclave |
-| Auto-lock | Configurable inactivity timer + clipboard purge |
+| Vault format | Opaque binary container (legacy formats still readable) |
+| Recovery phrase | BIP39 mnemonic → derived encryption password |
+| Biometric unlock | WebAuthn; wrapped credential, not a plaintext password cache |
+| Auto-lock | Inactivity timer + clipboard purge |
 
-**Zero Knowledge:** The application never sends secrets over the network. All cryptographic operations occur inside the browser. If users lose their master password and recovery phrase, data is unrecoverable by design.
+**Zero knowledge:** All crypto runs in the browser. If the master password and recovery phrase are lost, the vault cannot be recovered by anyone — including the developer.
 
-## Core Workflows
-
-### Vault Creation
-1. User supplies a master password (minimum strength enforced).
-2. App generates a 12-word BIP39 recovery phrase.
-3. User must copy or download the phrase (`EnigmaKeep-Recovery-Phrase.txt`) and verify random words.
-4. Vault metadata is initialized and encrypted locally.
-
-### Vault Unlock
-1. Master password is provided or biometric credential is asserted.
-2. Derived key decrypts vault; decrypted contents live only in memory.
-3. Clipboard operations auto-clear based on preference settings.
-
-### Regenerate Recovery Phrase
-1. User enters master password to confirm access.
-2. New BIP39 phrase is generated; old phrase is invalidated once verified.
-3. Updated hash is stored inside the encrypted vault payload.
-
-### Import / Export
-- Imports support CSV and JSON formats from popular managers. Imported entries are normalized before encryption.
-- Export produces an encrypted `.enc` vault file and optional CSV (user-controlled).
-
-## PWA & Installation Notes
-
-- Service worker precaches static assets; vault data is never cached.
-- Install prompt is shown when the browser exposes `beforeinstallprompt`.
-- On desktop Chrome/Edge the File System Access API allows seamless backup saving.
-- Mobile browsers fallback to manual export downloads.
-
-### Manual Installation
+## Quick start
 
 ```bash
 git clone https://github.com/hmalvee/EnigmaKeep.git
 cd EnigmaKeep
 npm install
-npm run dev         # local development
-npm run build       # production bundle
-npm run preview     # preview the production build
+npm run dev       # local development
+npm run build     # production bundle
+npm run preview   # preview production build
 ```
 
 Deploy the contents of `dist/` to any static host (Netlify, GitHub Pages, Vercel, etc.).
 
-## UI Map
+## Core workflows
 
-- `LandingPage` – marketing site, CTA to `/app`
-- `LoginScreen` – master password entry, biometric prompt, recovery flow
-- `CreateVaultFlow` – guided onboarding + recovery phrase confirmation
-- `VaultSettings` – tabs for general settings, security, backups
-- `PasswordEntry` & `NotesList` – main vault content views
-- `TotpList` – TOTP token manager with QR import
-- `PwaInstallModal` – per-platform installation instructions
+### Create a vault
+1. Choose a strong master password (minimum length enforced).
+2. Save the 12-word recovery phrase offline and verify it.
+3. Save the encrypted vault file when prompted (File System Access API on supported browsers).
 
-## Testing & Quality
+### Unlock
+1. Enter the master password, or use biometrics when enabled.
+2. Decrypted data lives only in memory for the session.
+3. Lock or idle timeout clears session secrets.
 
-- **Linting:** `npm run lint`
-- **Type checking:** `npm run typecheck`
-- **Unit/Integration tests:** add under `src/__tests__` (Jest/Vitest recommended). _Note: current project has limited automated test coverage; contributions welcome._
-- **Manual QA checklist:**
-  - Create → lock → unlock → regenerate recovery phrase
-  - Import CSV from Bitwarden, confirm normalization
-  - Enable biometric unlock (desktop Windows Hello / macOS Touch ID)
-  - Install PWA, verify offline mode, relaunch while offline
-  - Generate TOTP code and confirm countdown accuracy
+### Files inside the vault
+Use the built-in file manager to store encrypted files and folders alongside passwords and notes. Large vaults use a raw binary save path to avoid encoding blow-up.
 
-## Contribution Guide
+### Recovery
+Unlock with the recovery phrase if the master password is forgotten. Regenerating the phrase invalidates the previous one after verification.
 
-1. Fork the repository and create a feature branch.
-2. Keep brand references consistent (`EnigmaKeep`) and update marketing copy if flows change.
-3. Maintain accessibility: keyboard navigation, focus states, ARIA labels on modals.
-4. For crypto changes, include clear reasoning and references.
-5. Submit PRs against `main` with screenshots/GIFs for UI updates.
+## Project map
 
-## Support & Feedback
+- `src/pages/LandingPage.tsx` — marketing site
+- `src/App.tsx` — unlocked vault shell
+- `src/crypto/` — encryption, vault format, recovery, device binding
+- `src/utils/vaultManager.ts` — save / load / verify
+- `src/components/FileExplorer.tsx` — encrypted file manager
+- `src/components/LoginScreen.tsx` — unlock, biometric, snapshot restore
+
+## Scripts
+
+| Command | Purpose |
+|---------|---------|
+| `npm run dev` | Dev server |
+| `npm run build` | Production build |
+| `npm run preview` | Preview build |
+| `npm run lint` | ESLint |
+| `npm run typecheck` | TypeScript check |
+
+## Contributing
+
+1. Fork and branch from `main`.
+2. Keep branding consistent (`EnigmaKeep`).
+3. Prefer accessible UI (keyboard, focus, ARIA on modals).
+4. Document crypto changes clearly in the PR.
+5. Open a PR against `main` with UI screenshots when relevant.
+
+## Support
 
 - **Issues:** https://github.com/hmalvee/EnigmaKeep/issues  
 - **Discussions:** https://github.com/hmalvee/EnigmaKeep/discussions  
-- **Security disclosures:** email listed on the maintainer’s GitHub profile  
+- **Security:** contact via the maintainer’s [GitHub profile](https://github.com/hmalvee)
 
-Please avoid submitting the recovery phrase or encrypted vault file in public channels. If you encounter a security bug, disclose privately first.
+Never paste recovery phrases or vault files into public issues.
 
 ---
 
-**EnigmaKeep** – Your Digital Fortress. Built to keep secrets offline, forever.
-
+**EnigmaKeep** — offline secrets, under your control.

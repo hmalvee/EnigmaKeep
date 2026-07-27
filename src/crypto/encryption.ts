@@ -8,6 +8,16 @@ export interface EncryptedData {
   data: string;
 }
 
+/**
+ * Raw, byte-oriented encrypted block. Used by the opaque vault container so
+ * that nothing is ever serialised as recognisable JSON on disk or on the wire.
+ */
+export interface EncryptedBytes {
+  salt: Uint8Array;
+  iv: Uint8Array;
+  data: Uint8Array;
+}
+
 async function deriveKey(password: string, salt: Uint8Array): Promise<CryptoKey> {
   const encoder = new TextEncoder();
   const passwordKey = await crypto.subtle.importKey(
@@ -75,13 +85,50 @@ export async function decrypt(
   }
 }
 
+/**
+ * Encrypt a UTF-8 string to a raw byte block (random salt + IV + AES-GCM
+ * ciphertext-with-tag). The GCM authentication tag is what protects the file
+ * against tampering, replacing the old unkeyed SHA-512 "signature".
+ */
+export async function encryptToBytes(data: string, password: string): Promise<EncryptedBytes> {
+  const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
+  const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+  const key = await deriveKey(password, salt);
+  // Encode once into a Uint8Array (avoids SubtleCrypto re-scanning a giant string).
+  const plain = new TextEncoder().encode(data);
+  const cipher = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    plain
+  );
+  return { salt, iv, data: new Uint8Array(cipher) };
+}
+
+export async function decryptFromBytes(enc: EncryptedBytes, password: string): Promise<string> {
+  const key = await deriveKey(password, enc.salt);
+  try {
+    const plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: enc.iv },
+      key,
+      enc.data
+    );
+    return new TextDecoder().decode(plain);
+  } catch {
+    throw new Error('Decryption failed - incorrect password or corrupted data');
+  }
+}
+
 export async function verifyCrypto(): Promise<boolean> {
   try {
     const testData = 'crypto-self-test';
     const testPassword = 'test-password-123';
     const encrypted = await encrypt(testData, testPassword);
     const decrypted = await decrypt(encrypted, testPassword);
-    return decrypted === testData;
+    if (decrypted !== testData) return false;
+
+    const encBytes = await encryptToBytes(testData, testPassword);
+    const decBytes = await decryptFromBytes(encBytes, testPassword);
+    return decBytes === testData;
   } catch {
     return false;
   }

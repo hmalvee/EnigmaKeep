@@ -1,950 +1,641 @@
 import { useState } from 'react';
-import { Shield, Lock, Smartphone, Cloud, Fingerprint, Download, Check, Key, Globe, Zap, Github, ArrowRight, Star, Users, Code2, ChevronDown, ChevronUp, ShieldCheck, ClipboardCheck, Timer, Quote, BarChart3, LockKeyhole } from 'lucide-react';
+import {
+  Shield,
+  Github,
+  ArrowRight,
+  ArrowUpRight,
+  Lock,
+  WifiOff,
+  Files,
+  FileText,
+  Fingerprint,
+  KeyRound,
+  StickyNote,
+  KeySquare,
+  Import,
+  MonitorSmartphone,
+  Clock,
+  Check,
+  Plus,
+  Minus,
+  Eye,
+  Copy,
+  Menu,
+  X,
+  Star,
+} from 'lucide-react';
 import { Link } from '../components/Link';
 import { PwaInstallModal } from '../components/PwaInstallModal';
+import { ThemeToggle } from '../components/ThemeToggle';
+import { useScrollReveal } from '../hooks/useScrollReveal';
+
+const GITHUB_URL = 'https://github.com/hmalvee/EnigmaKeep';
+
+const trustChips = ['Open source', '100% offline', 'Zero-knowledge', 'No account'];
+
+const platforms = [
+  { id: 'android', name: 'Android', detail: 'Chrome, Edge' },
+  { id: 'ios', name: 'iOS', detail: 'Safari' },
+  { id: 'windows', name: 'Windows', detail: 'Chrome, Edge' },
+  { id: 'macos', name: 'macOS', detail: 'Safari, Chrome' },
+  { id: 'linux', name: 'Linux', detail: 'Chrome, Firefox' },
+];
+
+const features = [
+  {
+    icon: Files,
+    title: 'Encrypted file storage',
+    isNew: true,
+    body: 'Attach documents, keys, and images to any entry. Files are encrypted inside the vault alongside your passwords — never written to disk in the clear.',
+  },
+  {
+    icon: FileText,
+    title: 'Opaque vault file',
+    isNew: true,
+    body: 'Your vault saves as high-entropy .dat bytes — no readable headers, banners, or JSON for Wireshark or casual analysis to latch onto.',
+  },
+  {
+    icon: KeyRound,
+    title: 'Built-in 2FA authenticator',
+    body: 'Generate time-based TOTP codes right next to the login they belong to. One app for the password and the second factor.',
+  },
+  {
+    icon: Fingerprint,
+    title: 'Biometric unlock',
+    body: 'Open your vault with Touch ID, Face ID, or Windows Hello through WebAuthn. The biometric never leaves your device.',
+  },
+  {
+    icon: StickyNote,
+    title: 'Secure notes',
+    body: 'Recovery codes, licence keys, passport numbers — keep sensitive text encrypted the same way as your logins.',
+  },
+  {
+    icon: KeySquare,
+    title: 'Generator & strength meter',
+    body: 'Build long, random passwords with adjustable rules, and see a live strength read-out before you commit.',
+  },
+  {
+    icon: Import,
+    title: 'Import your history',
+    body: 'Move in from 1Password, LastPass, Bitwarden, or Chrome with a CSV export in a few minutes.',
+  },
+  {
+    icon: MonitorSmartphone,
+    title: 'Installable PWA',
+    body: 'Add EnigmaKeep to your home screen or desktop. It runs like a native app and keeps working offline.',
+  },
+  {
+    icon: Clock,
+    title: 'Auto-lock & clipboard clear',
+    body: 'The vault seals itself after inactivity, and anything you copy is wiped from the clipboard shortly after.',
+  },
+];
+
+const steps = [
+  {
+    n: '01',
+    title: 'Open EnigmaKeep',
+    body: 'Load the web app or install it as a PWA. There is no sign-up, no email, and no account to create.',
+  },
+  {
+    n: '02',
+    title: 'Create your vault',
+    body: 'Choose a master password and write down the 12-word recovery phrase. Both stay with you — we never see either.',
+  },
+  {
+    n: '03',
+    title: 'Start securing',
+    body: 'Add logins, generate strong passwords, store 2FA codes and files, or import everything from your old manager.',
+  },
+];
+
+const faqs = [
+  {
+    question: 'How does EnigmaKeep keep my passwords secure?',
+    answer:
+      'Everything is encrypted with AES-256-GCM. Your master password is stretched into a key using PBKDF2-SHA256 with 600,000 iterations, and that key never leaves your device. Because encryption and decryption happen locally, EnigmaKeep follows a zero-knowledge model: there is no server that could read your data even in principle.',
+  },
+  {
+    question: 'Is my data really stored offline?',
+    answer:
+      'Yes. Your vault lives encrypted on your device, and you can save it as a file. Nothing is transmitted to a server — you can confirm this yourself by watching the network tab. EnigmaKeep works with your connection switched off entirely.',
+  },
+  {
+    question: 'What happens if I forget my master password?',
+    answer:
+      'When you set up your vault you receive a 12-word recovery phrase. Keep it somewhere safe and offline. If you forget the master password, that phrase restores access. Without either the password or the phrase, the data cannot be recovered — that is the trade-off of true zero-knowledge encryption.',
+  },
+  {
+    question: 'What is the opaque vault file?',
+    answer:
+      'When you export your vault, EnigmaKeep writes an opaque binary .dat. There are no magic bytes, PEM banners, or plaintext metadata — a packet capture or hex dump sees random-looking data.',
+  },
+  {
+    question: 'Can I store files, not just passwords?',
+    answer:
+      'Yes. You can attach files to entries and they are encrypted inside the vault with the same AES-256-GCM protection as your logins.',
+  },
+  {
+    question: 'How does biometric unlock work?',
+    answer:
+      'EnigmaKeep uses WebAuthn. Your fingerprint or face data stays inside your device secure enclave and is never sent anywhere. The biometric simply authorises the local unlock of your encrypted vault.',
+  },
+  {
+    question: 'Can I import from another password manager?',
+    answer:
+      'Yes. Export a CSV from 1Password, LastPass, Bitwarden, or Chrome and import it directly into EnigmaKeep. Your logins are encrypted the moment they land in your vault.',
+  },
+  {
+    question: 'Is EnigmaKeep really free and open source?',
+    answer:
+      'Completely. There are no paid tiers, no ads, and no data collection. The source is published on GitHub under the MIT License.',
+  },
+];
+
+function VaultPreviewMock() {
+  return (
+    <div className="relative w-full max-w-4xl mx-auto">
+      <div
+        className="absolute -inset-8 md:-inset-16 rounded-full bg-accent/20 blur-3xl opacity-60 pointer-events-none"
+        aria-hidden
+      />
+      <div className="relative rounded-2xl border border-line bg-surface shadow-[0_24px_80px_-32px_rgb(var(--shadow)/0.45)] overflow-hidden animate-scaleIn">
+        {/* Fake window chrome */}
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-line bg-surface2/80">
+          <span className="w-2.5 h-2.5 rounded-full bg-danger/70" />
+          <span className="w-2.5 h-2.5 rounded-full bg-accent/70" />
+          <span className="w-2.5 h-2.5 rounded-full bg-success/70" />
+          <span className="ml-3 text-xs text-muted font-mono truncate">EnigmaKeep — Vault</span>
+        </div>
+
+        <div className="flex min-h-[280px] md:min-h-[340px]">
+          {/* Mini sidebar */}
+          <aside className="hidden sm:flex w-44 shrink-0 flex-col border-r border-line bg-bg-deep/50 p-3 gap-1">
+            <div className="flex items-center gap-2 px-2 py-2 mb-2">
+              <span className="w-7 h-7 rounded-lg bg-accent flex items-center justify-center">
+                <KeyRound className="text-accent-ink" size={14} />
+              </span>
+              <span className="text-xs font-display font-semibold text-ink">EnigmaKeep</span>
+            </div>
+            {[
+              { label: 'Passwords', active: true, n: 24 },
+              { label: '2FA Codes', active: false, n: 8 },
+              { label: 'Notes', active: false, n: 5 },
+              { label: 'Files', active: false, n: 3 },
+            ].map((item) => (
+              <div
+                key={item.label}
+                className={`flex items-center justify-between px-2.5 py-2 rounded-lg text-xs ${
+                  item.active
+                    ? 'bg-accent/10 text-accent border border-accent/20'
+                    : 'text-muted'
+                }`}
+              >
+                <span>{item.label}</span>
+                <span className="tabular-nums opacity-70">{item.n}</span>
+              </div>
+            ))}
+          </aside>
+
+          {/* Fake entries */}
+          <div className="flex-1 p-3 sm:p-4 space-y-3 bg-bg/40">
+            <div className="flex gap-2 mb-1">
+              <div className="flex-1 h-9 rounded-xl bg-surface2 border border-line" />
+              <div className="h-9 w-20 rounded-xl bg-accent" />
+            </div>
+            {[
+              { t: 'GitHub', u: 'you@mail.com', fav: true },
+              { t: 'Banking', u: '•••• 4821', fav: false },
+              { t: 'Netflix', u: 'household', fav: false },
+            ].map((row) => (
+              <div
+                key={row.t}
+                className="rounded-xl border border-line bg-surface p-3 flex items-center gap-3"
+              >
+                <div className="w-9 h-9 rounded-lg bg-accent/15 border border-accent/20 flex items-center justify-center font-display font-bold text-accent text-sm">
+                  {row.t[0]}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-sm font-semibold text-ink truncate">{row.t}</p>
+                    {row.fav && <Star size={11} className="text-accent" fill="currentColor" />}
+                  </div>
+                  <p className="text-xs text-muted truncate">{row.u}</p>
+                </div>
+                <div className="flex gap-1 text-muted">
+                  <Eye size={14} />
+                  <Copy size={14} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function LandingPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<string | null>(null);
-  const [expandedFaq, setExpandedFaq] = useState<number | null>(null);
-
-  const breadcrumbItems = [
-    { label: 'Home', href: '#top' },
-    { label: 'Features', href: '#features' },
-    { label: 'Impact', href: '#impact' },
-    { label: 'Testimonials', href: '#testimonials' },
-    { label: 'FAQ', href: '#faq' }
-  ];
-
-  const completedFeatures = [
-    {
-      title: 'Password Manager',
-      description: 'Store unlimited passwords with AES-256 encryption',
-      icon: Lock
-    },
-    {
-      title: '2FA Authenticator',
-      description: 'Built-in TOTP codes for two-factor authentication',
-      icon: Shield
-    },
-    {
-      title: 'Secure Notes',
-      description: 'Encrypted notes for sensitive information',
-      icon: Key
-    },
-    {
-      title: 'Biometric Login',
-      description: 'Unlock with fingerprint or Face ID',
-      icon: Fingerprint
-    },
-    {
-      title: 'PWA Support',
-      description: 'Install on any device, works offline',
-      icon: Smartphone
-    },
-    {
-      title: 'Import/Export',
-      description: 'Import from 1Password, LastPass, Bitwarden, Chrome',
-      icon: Download
-    }
-  ];
-
-  const faqs = [
-    {
-      question: 'How does EnigmaKeep ensure my passwords are secure?',
-      answer: 'EnigmaKeep uses AES-256-GCM encryption with PBKDF2 (600,000 iterations) to protect your data. Your master password never leaves your device, and all encryption happens locally. We follow zero-knowledge architecture, meaning we never have access to your data.'
-    },
-    {
-      question: 'Is my data really stored offline?',
-      answer: 'Yes, absolutely! All your data is stored locally in your browser using encrypted storage. Nothing is sent to any server, and the app works completely offline. You can verify this by checking your browser network tab - no data transmission occurs.'
-    },
-    {
-      question: 'What happens if I forget my master password?',
-      answer: 'During setup, you receive a recovery phrase (24 words). Store this safely! If you forget your master password, you can recover your vault using this phrase. Without it, your data cannot be recovered - this is part of our zero-knowledge security model.'
-    },
-    {
-      question: 'Can I use EnigmaKeep on multiple devices?',
-      answer: 'Currently, EnigmaKeep is device-specific since data is stored locally. However, you can export your vault as an encrypted file and import it on another device. Cloud sync with end-to-end encryption is in our development pipeline.'
-    },
-    {
-      question: 'How does biometric authentication work?',
-      answer: 'EnigmaKeep uses WebAuthn/FIDO2 for biometric authentication. Your fingerprint or face data never leaves your device - it stays in your device secure enclave. We simply use it to unlock the encrypted vault stored locally.'
-    },
-    {
-      question: 'Is EnigmaKeep really free?',
-      answer: 'Yes! EnigmaKeep is completely free and open-source. You can use all features without any cost, ads, or data collection. We believe privacy should be accessible to everyone.'
-    },
-    {
-      question: 'Can I import passwords from other password managers?',
-      answer: 'Yes! EnigmaKeep supports importing from popular password managers including 1Password, LastPass, Bitwarden, Chrome, and Firefox. Simply export from your current manager as CSV and import into EnigmaKeep.'
-    },
-    {
-      question: 'What makes EnigmaKeep different from other password managers?',
-      answer: 'EnigmaKeep is 100% offline with zero-knowledge encryption, completely free and open-source, requires no account creation, supports biometric authentication, and works as a PWA on all devices. Your data never touches our servers because we don\'t have any!'
-    }
-  ];
-
-  const impactMetrics = [
-    {
-      title: 'Vaults Secured',
-      value: '18K+',
-      description: 'Individuals and teams trusting EnigmaKeep for daily protection',
-      icon: ShieldCheck
-    },
-    {
-      title: 'Credentials Protected',
-      value: '1.2M',
-      description: 'Encrypted passwords, notes, and 2FA codes kept completely offline',
-      icon: LockKeyhole
-    },
-    {
-      title: 'Average Unlock Time',
-      value: '< 2 sec',
-      description: 'Fast biometric unlock across desktop, tablet, and mobile devices',
-      icon: Timer
-    },
-    {
-      title: 'Countries Served',
-      value: '120+',
-      description: 'Global footprint thanks to PWA support and offline-first design',
-      icon: Globe
-    }
-  ];
-
-  const testimonials = [
-    {
-      quote:
-        "EnigmaKeep replaced three different tools for my studio. The biometric unlock and vault health insights save me minutes every day.",
-      name: 'Amelia Carter',
-      role: 'Founder, Carter Creative',
-      badge: 'Design Agency'
-    },
-    {
-      quote:
-        "Our security audit loved the zero-knowledge architecture. The clipboard guard and auto-lock features are top-tier for compliance.",
-      name: 'Marcus Liu',
-      role: 'DevSecOps Lead, Northbridge Labs',
-      badge: 'Security Team'
-    },
-    {
-      quote:
-        "Installing as a PWA gave our distributed team the same experience on Mac, Windows, and iOS. Importing from Bitwarden took minutes.",
-      name: 'Priya Natarajan',
-      role: 'CTO, Horizon Collective',
-      badge: 'Remote Team'
-    }
-  ];
+  const [expandedFaq, setExpandedFaq] = useState<number | null>(0);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const scrollRef = useScrollReveal();
 
   return (
-    <div id="top" className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
-      {/* Hero Section */}
-      <div className="relative overflow-hidden">
-        {/* Animated gradient orbs */}
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-cyan-500/20 rounded-full blur-3xl animate-pulse"></div>
-        <div className="absolute bottom-0 right-1/4 w-96 h-96 bg-blue-500/20 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }}></div>
-        <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/5 to-blue-500/5"></div>
+    <div ref={scrollRef} id="top" className="min-h-screen bg-bg text-ink">
+      {/* Navigation — glass sticky, inspired by 21st SaaS template */}
+      <header className="fixed top-0 w-full z-50 border-b border-line/80 bg-bg/80 backdrop-blur-xl">
+        <nav className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+          <a href="#top" className="flex items-center gap-2.5 group">
+            <span className="w-9 h-9 rounded-xl bg-accent flex items-center justify-center shadow-[0_8px_20px_-10px_rgb(var(--accent)/0.8)] group-hover:scale-105 transition-transform">
+              <Shield className="text-accent-ink" size={18} />
+            </span>
+            <span className="font-display text-lg font-semibold tracking-tight">EnigmaKeep</span>
+          </a>
 
-        <nav className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-cyan-500/30">
-                <Shield className="text-white" size={24} />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-white">EnigmaKeep</h1>
-                <p className="text-xs text-violet-400">Your Digital Fortress</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <a
-                href="https://github.com/hmalvee/EnigmaKeep"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-gray-400 hover:text-white transition-colors"
-              >
-                <Github size={24} />
-              </a>
-              <a
-                href="/app"
-                className="px-6 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg transition-all duration-200 font-medium shadow-md hover:shadow-lg"
-              >
-                Open App
-              </a>
-            </div>
-          </div>
-        </nav>
-
-        <nav
-          aria-label="Breadcrumb"
-          className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8"
-        >
-          <ol className="flex flex-wrap items-center gap-2 text-sm text-slate-300/80">
-            {breadcrumbItems.map((item, index) => (
-              <li key={item.href} className="flex items-center gap-2">
-                <a
-                  href={item.href}
-                  className="hover:text-white transition-colors underline-offset-4 hover:underline"
-                >
-                  {item.label}
-                </a>
-                {index < breadcrumbItems.length - 1 && (
-                  <span className="text-slate-500">/</span>
-                )}
-              </li>
-            ))}
-          </ol>
-        </nav>
-
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-16 pb-24 text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border border-cyan-500/30 rounded-full text-cyan-300 text-sm font-medium mb-8 backdrop-blur-sm shadow-lg shadow-cyan-500/10">
-            <Zap size={16} className="animate-pulse" />
-            <span>100% Offline • Zero-Knowledge • Open Source</span>
+          <div className="hidden md:flex items-center gap-8 absolute left-1/2 -translate-x-1/2">
+            <a href="#features" className="text-sm text-muted hover:text-ink transition-colors">Features</a>
+            <a href="#how" className="text-sm text-muted hover:text-ink transition-colors">How it works</a>
+            <a href="#faq" className="text-sm text-muted hover:text-ink transition-colors">FAQ</a>
           </div>
 
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-extrabold text-white mb-6 leading-tight tracking-tight">
-            Your Digital Fortress,
+          <div className="hidden md:flex items-center gap-2">
+            <ThemeToggle />
+            <a
+              href={GITHUB_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-ghost !px-3 !py-2"
+              aria-label="GitHub"
+            >
+              <Github size={18} />
+            </a>
+            <a href="/app" className="btn-primary !px-5 !py-2 text-sm gap-1.5">
+              Open Vault
+              <ArrowRight size={15} />
+            </a>
+          </div>
+
+          <button
+            type="button"
+            className="md:hidden p-2 text-muted hover:text-ink"
+            onClick={() => setMobileOpen(v => !v)}
+            aria-label="Toggle menu"
+          >
+            {mobileOpen ? <X size={22} /> : <Menu size={22} />}
+          </button>
+        </nav>
+
+        {mobileOpen && (
+          <div className="md:hidden border-t border-line bg-bg/95 backdrop-blur-xl animate-slideIn">
+            <div className="px-4 py-4 flex flex-col gap-3">
+              <a href="#features" onClick={() => setMobileOpen(false)} className="text-sm text-muted hover:text-ink py-2">Features</a>
+              <a href="#how" onClick={() => setMobileOpen(false)} className="text-sm text-muted hover:text-ink py-2">How it works</a>
+              <a href="#faq" onClick={() => setMobileOpen(false)} className="text-sm text-muted hover:text-ink py-2">FAQ</a>
+              <div className="flex items-center gap-2 pt-3 border-t border-line">
+                <ThemeToggle />
+                <a href="/app" className="btn-primary flex-1 !py-2.5 text-sm justify-center">Open Vault</a>
+              </div>
+            </div>
+          </div>
+        )}
+      </header>
+
+      {/* Hero — brand first, one CTA group, dominant product visual */}
+      <section className="relative min-h-[100svh] flex flex-col items-center pt-24 md:pt-28 pb-16 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute inset-0 ai-grid-bg opacity-25" />
+          <div className="ambient-orb top-20 left-1/4 w-[480px] h-[480px] bg-accent/25" />
+          <div className="ambient-orb bottom-10 right-1/5 w-[360px] h-[360px] bg-accent-2/15" style={{ animationDelay: '-5s' }} />
+        </div>
+
+        <div className="relative z-10 w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col items-center text-center">
+          <aside className="mb-7 inline-flex flex-wrap items-center justify-center gap-2 px-4 py-2 rounded-full border border-line bg-surface/70 backdrop-blur-sm animate-fadeIn">
+            <span className="w-1.5 h-1.5 rounded-full bg-success animate-pulse-soft" />
+            <span className="text-xs text-muted font-mono tracking-wide">
+              Open source · MIT · No account required
+            </span>
+            <a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-accent hover:text-accent-2 transition-colors">
+              Star on GitHub
+              <ArrowRight size={12} />
+            </a>
+          </aside>
+
+          <p className="font-display text-sm sm:text-base font-semibold tracking-[0.2em] uppercase text-accent mb-4 animate-fadeIn">
+            EnigmaKeep
+          </p>
+
+          <h1 className="font-display text-4xl sm:text-5xl md:text-6xl lg:text-7xl font-semibold tracking-tight leading-[1.05] max-w-4xl animate-fadeIn">
+            <span className="text-ink">Your digital fortress.</span>
             <br />
-            <span className="bg-gradient-to-r from-cyan-400 via-cyan-300 to-blue-400 bg-clip-text text-transparent">
-              Completely Offline
+            <span className="bg-gradient-to-b from-ink via-ink to-muted bg-clip-text text-transparent">
+              Sealed on your device.
             </span>
           </h1>
 
-          <p className="text-xl md:text-2xl text-gray-300 mb-12 max-w-3xl mx-auto leading-relaxed">
-            The password manager that respects your privacy. Zero cloud, zero tracking, zero compromise.
-            <span className="block mt-2 text-gray-400">Your secrets stay in your sanctuary, nowhere else.</span>
+          <p className="mt-6 text-base sm:text-lg text-muted max-w-2xl leading-relaxed animate-fadeIn">
+            Offline, zero-knowledge password manager. Encrypted locally. Never touches a server —
+            because there isn&rsquo;t one.
           </p>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
-            <a
-              href="/app"
-              className="group px-8 py-4 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl transition-all duration-300 font-bold shadow-2xl shadow-cyan-500/25 hover:shadow-cyan-500/40 hover:scale-105 flex items-center gap-3 text-lg"
-            >
-              <Download size={24} className="group-hover:animate-bounce" />
-              Get Started Free
-              <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
+          <div className="mt-9 flex flex-col sm:flex-row items-center gap-3 animate-fadeIn">
+            <a href="/app" className="btn-primary gap-2 group !px-8 !py-3.5 text-base">
+              Open Vault
+              <ArrowRight size={18} className="group-hover:translate-x-0.5 transition-transform" />
             </a>
-            <a
-              href="#features"
-              className="px-8 py-4 border-2 border-gray-600 text-gray-200 rounded-xl hover:bg-gray-800/50 hover:border-gray-500 transition-all duration-300 font-semibold backdrop-blur-sm"
-            >
-              Learn More
+            <a href="#features" className="btn-ghost gap-2 !px-8 !py-3.5 text-base">
+              See features
             </a>
           </div>
 
-          {/* Trust Indicators */}
-          <div className="flex flex-wrap items-center justify-center gap-8 mb-8 text-sm text-gray-400">
-            <div className="flex items-center gap-2">
-              <Star className="text-yellow-500" size={18} fill="currentColor" />
-              <span>Open Source</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Users className="text-violet-400" size={18} />
-              <span>Privacy First</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Code2 className="text-blue-400" size={18} />
-              <span>Auditable Code</span>
-            </div>
-          </div>
-
-          <p className="text-sm text-gray-500 animate-pulse">
-            Available on all platforms • Works in any modern browser
-          </p>
-        </div>
-      </div>
-
-      {/* Install Section */}
-      <div id="download" className="relative bg-gradient-to-b from-slate-900 to-slate-950 border-y border-gray-800 py-20">
-        <div className="absolute inset-0 bg-grid-pattern opacity-5"></div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-12">
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-4">
-              Install on Your Platform
-            </h2>
-            <p className="text-lg text-gray-400">One app, all your devices</p>
-          </div>
-
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-6">
-            {/* Android */}
-            <button
-              onClick={() => setSelectedPlatform('android')}
-              className="group bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-2xl p-6 hover:border-cyan-500 hover:bg-gray-800 transition-all duration-300 text-center hover:scale-105 hover:shadow-xl hover:shadow-cyan-500/10"
-            >
-              <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                <svg viewBox="0 0 24 24" className="w-full h-full text-green-500">
-                  <path fill="currentColor" d="M17.6,9.48l1.84-3.18c0.16-0.31,0.04-0.69-0.26-0.85c-0.29-0.15-0.65-0.06-0.83,0.22l-1.88,3.24 c-2.86-1.21-6.08-1.21-8.94,0L5.65,5.67c-0.19-0.29-0.58-0.38-0.87-0.2C4.5,5.65,4.41,6.01,4.56,6.3L6.4,9.48 C3.3,11.25,1.28,14.44,1,18h22C22.72,14.44,20.7,11.25,17.6,9.48z M7,15.25c-0.69,0-1.25-0.56-1.25-1.25 c0-0.69,0.56-1.25,1.25-1.25S8.25,13.31,8.25,14C8.25,14.69,7.69,15.25,7,15.25z M17,15.25c-0.69,0-1.25-0.56-1.25-1.25 c0-0.69,0.56-1.25,1.25-1.25s1.25,0.56,1.25,1.25C18.25,14.69,17.69,15.25,17,15.25z"/>
-                </svg>
-              </div>
-              <h3 className="text-white font-semibold mb-1">Android</h3>
-              <p className="text-sm text-gray-400">Chrome, Edge</p>
-            </button>
-
-            {/* iOS */}
-            <button
-              onClick={() => setSelectedPlatform('ios')}
-              className="group bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-2xl p-6 hover:border-cyan-500 hover:bg-gray-800 transition-all duration-300 text-center hover:scale-105 hover:shadow-xl hover:shadow-cyan-500/10"
-            >
-              <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                <svg viewBox="0 0 24 24" className="w-full h-full text-gray-300">
-                  <path fill="currentColor" d="M17.05,20.28c-0.98,0.95-2.05,0.8-3.08,0.35c-1.09-0.46-2.09-0.48-3.24,0c-1.44,0.62-2.2,0.44-3.06-0.35 C2.79,15.25,3.51,7.59,9.05,7.31c1.35,0.07,2.29,0.74,3.08,0.8c1.18-0.24,2.31-0.93,3.57-0.84c1.51,0.12,2.65,0.72,3.4,1.8 c-3.12,1.87-2.38,5.98,0.48,7.13c-0.57,1.5-1.31,2.99-2.54,4.09l0.01-0.01L17.05,20.28z M12.03,7.25c-0.15-2.23,1.66-4.07,3.74-4.25c0.29,2.58-2.34,4.5-3.74,4.25z"/>
-                </svg>
-              </div>
-              <h3 className="text-white font-semibold mb-1">iOS</h3>
-              <p className="text-sm text-gray-400">Safari</p>
-            </button>
-
-            {/* Windows */}
-            <button
-              onClick={() => setSelectedPlatform('windows')}
-              className="group bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-2xl p-6 hover:border-cyan-500 hover:bg-gray-800 transition-all duration-300 text-center hover:scale-105 hover:shadow-xl hover:shadow-cyan-500/10"
-            >
-              <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                <svg viewBox="0 0 24 24" className="w-full h-full text-blue-500">
-                  <path fill="currentColor" d="M3,12V6.75L9,5.43V11.91L3,12M20,3V11.75L10,11.9V5.21L20,3M3,13L9,13.09V19.9L3,18.75V13M20,13.25V22L10,20.09V13.1L20,13.25Z"/>
-                </svg>
-              </div>
-              <h3 className="text-white font-semibold mb-1">Windows</h3>
-              <p className="text-sm text-gray-400">Chrome, Edge</p>
-            </button>
-
-            {/* macOS */}
-            <button
-              onClick={() => setSelectedPlatform('macos')}
-              className="group bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-2xl p-6 hover:border-cyan-500 hover:bg-gray-800 transition-all duration-300 text-center hover:scale-105 hover:shadow-xl hover:shadow-cyan-500/10"
-            >
-              <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                <svg viewBox="0 0 24 24" className="w-full h-full text-gray-300">
-                  <path fill="currentColor" d="M17.05,20.28c-0.98,0.95-2.05,0.8-3.08,0.35c-1.09-0.46-2.09-0.48-3.24,0c-1.44,0.62-2.2,0.44-3.06-0.35 C2.79,15.25,3.51,7.59,9.05,7.31c1.35,0.07,2.29,0.74,3.08,0.8c1.18-0.24,2.31-0.93,3.57-0.84c1.51,0.12,2.65,0.72,3.4,1.8 c-3.12,1.87-2.38,5.98,0.48,7.13c-0.57,1.5-1.31,2.99-2.54,4.09l0.01-0.01L17.05,20.28z M12.03,7.25c-0.15-2.23,1.66-4.07,3.74-4.25c0.29,2.58-2.34,4.5-3.74,4.25z"/>
-                </svg>
-              </div>
-              <h3 className="text-white font-semibold mb-1">macOS</h3>
-              <p className="text-sm text-gray-400">Safari, Chrome</p>
-            </button>
-
-            {/* Linux */}
-            <button
-              onClick={() => setSelectedPlatform('linux')}
-              className="group bg-gray-800/50 backdrop-blur-sm border border-gray-700 rounded-2xl p-6 hover:border-cyan-500 hover:bg-gray-800 transition-all duration-300 text-center hover:scale-105 hover:shadow-xl hover:shadow-cyan-500/10"
-            >
-              <div className="w-16 h-16 mx-auto mb-4 flex items-center justify-center">
-                <svg viewBox="0 0 24 24" className="w-full h-full text-yellow-500">
-                  <path fill="currentColor" d="M14.62,8.35C14.2,8.63 12.87,9.39 12.67,9.54C12.28,9.85 11.92,9.83 11.53,9.53C11.33,9.37 10,8.61 9.58,8.34C9.1,8.03 9.13,7.64 9.66,7.42C11.3,6.73 12.94,6.78 14.57,7.45C15.06,7.66 15.08,8.05 14.62,8.35M21.84,15.63C20.91,13.54 19.64,11.64 18,9.97C17.47,9.42 17.14,8.8 16.94,8.09C16.84,7.76 16.77,7.42 16.7,7.08C16.5,6.2 16.41,5.3 16,4.47C15.27,2.89 14,2.07 12.16,2C10.35,2.05 9.05,2.88 8.3,4.47C7.91,5.32 7.83,6.22 7.64,7.11C7.58,7.44 7.5,7.77 7.41,8.1C7.2,8.8 6.87,9.42 6.35,9.97C4.72,11.64 3.44,13.54 2.5,15.63C2.25,16.21 2.16,16.79 2.4,17.39C2.57,17.84 2.89,18.13 3.32,18.25C3.71,18.35 4.1,18.36 4.5,18.36C7.43,18.3 10.13,17.55 12.63,16.07C12.76,16 12.92,15.99 13.05,16.07C15.55,17.55 18.25,18.3 21.17,18.36C21.57,18.36 22,18.35 22.36,18.25C22.79,18.14 23.1,17.84 23.28,17.39C23.5,16.79 23.41,16.21 23.17,15.63L21.84,15.63M7.67,14.68C7.04,14.68 6.54,14.18 6.54,13.55C6.54,12.92 7.04,12.42 7.67,12.42C8.3,12.42 8.8,12.92 8.8,13.55C8.8,14.18 8.3,14.68 7.67,14.68M16.33,14.68C15.7,14.68 15.2,14.18 15.2,13.55C15.2,12.92 15.7,12.42 16.33,12.42C16.96,12.42 17.46,12.92 17.46,13.55C17.46,14.18 16.96,14.68 16.33,14.68Z"/>
-                </svg>
-              </div>
-              <h3 className="text-white font-semibold mb-1">Linux</h3>
-              <p className="text-sm text-gray-400">Chrome, Firefox</p>
-            </button>
-          </div>
-
-          <div className="mt-12 text-center space-y-3">
-            <p className="text-gray-400">
-              No installation required • Works in your browser • Install as PWA for offline access
-            </p>
-            <p className="text-sm text-gray-500">
-              Click any platform above to see installation instructions
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Features Section */}
-      <div id="features" className="relative py-24">
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950"></div>
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-20">
-            <div className="inline-block mb-4">
-              <span className="px-4 py-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-violet-400 text-sm font-medium">Features</span>
-            </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-              Built for Privacy & Security
-            </h2>
-            <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-              Enterprise-grade security without compromising on convenience. Everything you need, nothing you don't.
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="group bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-2xl p-8 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-cyan-500/10">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Lock size={24} className="text-white" />
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                Zero-Knowledge Encryption
-              </h3>
-              <p className="text-gray-400 mb-4">
-                AES-256-GCM encryption with PBKDF2 (600k iterations). Your master password never leaves your device.
-              </p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Military-grade encryption</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Zero-knowledge architecture</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Encrypted at rest locally</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="group bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-2xl p-8 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-cyan-500/10">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Fingerprint size={24} className="text-white" />
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                Biometric Authentication
-              </h3>
-              <p className="text-gray-400 mb-4">
-                Unlock your vault with fingerprint or face recognition using WebAuthn/FIDO2.
-              </p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Touch ID & Face ID support</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Windows Hello compatible</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Privacy-preserving</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="group bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-2xl p-8 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-cyan-500/10">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Cloud className="text-white" size={24} style={{ transform: 'scale(-1, 1)' }} />
-                <div className="absolute w-0.5 h-6 bg-red-500 rotate-45"></div>
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                100% Offline
-              </h3>
-              <p className="text-gray-400 mb-4">
-                No cloud sync, no servers, no data transmission. Everything stays on your device.
-              </p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Works without internet</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>No data transmission</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Complete privacy</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="group bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-2xl p-8 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-cyan-500/10">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Smartphone size={24} className="text-white" />
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                Progressive Web App
-              </h3>
-              <p className="text-gray-400 mb-4">
-                Install as a native app on any device. Works offline, updates automatically.
-              </p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Install on home screen</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>App-like experience</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Cross-platform support</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="group bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-2xl p-8 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-cyan-500/10">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Key size={24} className="text-white" />
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                Password Generator
-              </h3>
-              <p className="text-gray-400 mb-4">
-                Generate strong, unique passwords with customizable length and character types.
-              </p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Cryptographically secure</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Customizable rules</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Password strength meter</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="group bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-2xl p-8 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-cyan-500/10">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Globe size={24} className="text-white" />
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                Import & Export
-              </h3>
-              <p className="text-gray-400 mb-4">
-                Easily migrate from other password managers or export your data.
-              </p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>1Password, LastPass, Bitwarden</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Chrome, Firefox support</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>CSV & JSON formats</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="group bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-2xl p-8 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-cyan-500/10">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <ShieldCheck size={24} className="text-white" />
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                Built-in 2FA Authenticator
-              </h3>
-              <p className="text-gray-400 mb-4">
-                Generate TOTP codes next to passwords so every login stays protected.
-              </p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Time-based tokens with live countdown</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Unlimited accounts & auto-sync inside vault</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>QR import for Google Authenticator apps</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="group bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-2xl p-8 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-cyan-500/10">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <Timer size={24} className="text-white" />
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                Smart Auto-Lock
-              </h3>
-              <p className="text-gray-400 mb-4">
-                Adaptive timeouts keep your vault sealed without interrupting your flow.
-              </p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Activity-based lock suggestions</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Instant lock hotkey & PWA quick action</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Clipboard wipe on lock to prevent leaks</span>
-                </li>
-              </ul>
-            </div>
-
-            <div className="group bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-2xl p-8 hover:border-cyan-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-cyan-500/10">
-              <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300">
-                <ClipboardCheck size={24} className="text-white" />
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                Clipboard Guard
-              </h3>
-              <p className="text-gray-400 mb-4">
-                Automatic clipboard clearing with visual timers to keep copied secrets safe.
-              </p>
-              <ul className="space-y-2 text-sm text-gray-400">
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Customizable wipe intervals (5-300 seconds)</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Visual countdown overlay on copy actions</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={16} className="text-green-500" />
-                  <span>Auto-detects password vs. note copying</span>
-                </li>
-              </ul>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Completed Features Section */}
-      <div className="relative bg-gradient-to-b from-slate-900 to-slate-950 border-y border-gray-800 py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <div className="inline-block mb-4">
-              <span className="px-4 py-2 bg-green-500/10 border border-green-500/30 rounded-full text-green-400 text-sm font-medium flex items-center gap-2">
-                <Check size={16} />
-                Available Now
-              </span>
-            </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-              Powerful Features, Ready Today
-            </h2>
-            <p className="text-xl text-gray-400">
-              Everything you need for secure password management
-            </p>
-          </div>
-
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {completedFeatures.map((feature, index) => {
-              const Icon = feature.icon;
-              return (
-                <div
-                  key={index}
-                  className="group bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-2xl p-6 hover:border-green-500/50 transition-all duration-300 hover:shadow-xl hover:shadow-green-500/10"
-                >
-                  <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center mb-4 group-hover:scale-110 transition-transform duration-300">
-                    <Icon size={24} className="text-white" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-white mb-2">
-                    {feature.title}
-                  </h3>
-                  <p className="text-gray-400 text-sm">
-                    {feature.description}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Impact Metrics */}
-      <div id="impact" className="relative bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 border-b border-gray-800 py-24 overflow-hidden">
-        <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full bg-cyan-500/10 blur-3xl"></div>
-        <div className="absolute -bottom-32 -left-32 w-96 h-96 rounded-full bg-blue-600/10 blur-3xl"></div>
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-cyan-200 text-sm font-medium">
-              <BarChart3 size={16} />
-              <span>Real-World Impact</span>
-            </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-white mt-6 mb-4">
-              Trusted Across Industries & Time Zones
-            </h2>
-            <p className="text-lg text-gray-400 max-w-3xl mx-auto">
-              EnigmaKeep powers privacy-first workflows for security teams, freelancers, and remote organizations around the globe.
-            </p>
-          </div>
-
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-            {impactMetrics.map(metric => {
-              const Icon = metric.icon;
-              return (
-                <div
-                  key={metric.title}
-                  className="group relative bg-gradient-to-br from-gray-900 to-slate-900 border border-gray-800 rounded-2xl p-6 overflow-hidden hover:border-cyan-500/40 transition-all duration-300 hover:shadow-2xl hover:shadow-cyan-500/15"
-                >
-                  <div className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-gradient-to-br from-cyan-500/10 via-transparent to-blue-500/10"></div>
-                  <div className="relative z-10">
-                    <div className="w-12 h-12 rounded-xl flex items-center justify-center bg-cyan-500/15 border border-cyan-500/30 mb-5">
-                      <Icon size={24} className="text-cyan-300" />
-                    </div>
-                    <p className="text-3xl font-bold text-white mb-2">{metric.value}</p>
-                    <h3 className="text-lg font-semibold text-cyan-100 mb-3">
-                      {metric.title}
-                    </h3>
-                    <p className="text-sm text-gray-400 leading-relaxed">
-                      {metric.description}
-                    </p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* Testimonials */}
-      <div id="testimonials" className="relative py-24 bg-gradient-to-b from-slate-900 to-slate-950 border-b border-gray-800">
-        <div className="absolute inset-0 bg-grid-pattern opacity-[0.04]"></div>
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-          <div className="text-center mb-16">
-            <div className="inline-flex items-center gap-2 px-4 py-2 bg-purple-500/10 border border-purple-500/30 rounded-full text-purple-200 text-sm font-medium">
-              <Quote size={18} />
-              <span>Customer Stories</span>
-            </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-white mt-6 mb-4">
-              Teams That Switched, Stayed
-            </h2>
-            <p className="text-lg text-gray-400 max-w-3xl mx-auto">
-              Hear why leaders in security, design, and remote operations recommend EnigmaKeep as their always-offline, always-ready vault.
-            </p>
-          </div>
-
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-            {testimonials.map(testimonial => (
-              <div
-                key={testimonial.name}
-                className="bg-gradient-to-br from-gray-900 to-gray-800 border border-gray-800 rounded-2xl p-6 shadow-lg shadow-slate-900/40 hover:border-purple-500/40 hover:shadow-purple-500/15 transition-all duration-300"
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="w-12 h-12 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-300 font-semibold">
-                    {testimonial.name
-                      .split(' ')
-                      .map(part => part[0])
-                      .join('')
-                      .slice(0, 2)}
-                  </div>
-                  <div>
-                    <p className="text-white font-semibold leading-tight">
-                      {testimonial.name}
-                    </p>
-                    <p className="text-sm text-gray-400">{testimonial.role}</p>
-                  </div>
-                </div>
-                <p className="text-gray-300 leading-relaxed mb-4">
-                  “{testimonial.quote}”
-                </p>
-                <span className="inline-flex px-3 py-1 rounded-full text-xs font-semibold bg-purple-500/15 text-purple-200 border border-purple-500/20">
-                  {testimonial.badge}
-                </span>
-              </div>
+          <ul className="mt-8 flex flex-wrap justify-center gap-x-6 gap-y-2 animate-fadeIn">
+            {trustChips.map((chip) => (
+              <li key={chip} className="flex items-center gap-2 text-sm text-muted">
+                <Check size={14} className="text-accent" />
+                {chip}
+              </li>
             ))}
+          </ul>
+
+          <div className="mt-14 md:mt-16 w-full animate-slideUp">
+            <VaultPreviewMock />
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* FAQ Section */}
-      <div id="faq" className="relative py-24">
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-900 to-slate-950"></div>
-        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-16">
-            <div className="inline-block mb-4">
-              <span className="px-4 py-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-violet-400 text-sm font-medium">FAQ</span>
-            </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-              Frequently Asked Questions
+      {/* Pillars */}
+      <section className="border-y border-line bg-bg-deep relative z-10">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-16 md:py-20 grid md:grid-cols-2 gap-5">
+          <div className="scroll-reveal-left vault-entry-card p-8">
+            <span className="w-11 h-11 rounded-xl bg-accent/10 border border-accent/25 flex items-center justify-center mb-5">
+              <Lock className="text-accent" size={22} />
+            </span>
+            <h2 className="font-display text-2xl font-semibold tracking-tight">
+              Zero-knowledge encryption
             </h2>
-            <p className="text-xl text-gray-400">
-              Everything you need to know about EnigmaKeep
+            <p className="mt-3 text-muted leading-relaxed">
+              AES-256-GCM with PBKDF2-SHA256 (600k iterations). The key stays on your device. We
+              could not read your data if we tried — there is nothing on our side to read.
+            </p>
+            <p className="mt-5 font-mono text-xs text-accent tracking-wide">
+              AES-256-GCM · PBKDF2 · 600,000 iterations
             </p>
           </div>
 
-          <div className="space-y-4">
-            {faqs.map((faq, index) => (
-              <div
-                key={index}
-                className="bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-xl overflow-hidden hover:border-cyan-500/50 transition-all duration-300"
-              >
-                <button
-                  onClick={() => setExpandedFaq(expandedFaq === index ? null : index)}
-                  className="w-full px-6 py-5 flex items-center justify-between text-left hover:bg-gray-800/50 transition-colors"
-                >
-                  <span className="text-lg font-semibold text-white pr-4">
-                    {faq.question}
-                  </span>
-                  {expandedFaq === index ? (
-                    <ChevronUp className="text-violet-400 flex-shrink-0" size={20} />
-                  ) : (
-                    <ChevronDown className="text-gray-400 flex-shrink-0" size={20} />
-                  )}
-                </button>
-                {expandedFaq === index && (
-                  <div className="px-6 pb-5 text-gray-300 leading-relaxed animate-slideIn">
-                    {faq.answer}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* How It Works */}
-      <div className="relative bg-gradient-to-b from-slate-950 to-slate-900 border-y border-gray-800 py-24">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="text-center mb-20">
-            <div className="inline-block mb-4">
-              <span className="px-4 py-2 bg-cyan-500/10 border border-cyan-500/30 rounded-full text-violet-400 text-sm font-medium">Simple Process</span>
-            </div>
-            <h2 className="text-4xl md:text-5xl font-bold text-white mb-6">
-              How It Works
+          <div className="scroll-reveal-right vault-entry-card p-8">
+            <span className="w-11 h-11 rounded-xl bg-accent/10 border border-accent/25 flex items-center justify-center mb-5">
+              <WifiOff className="text-accent" size={22} />
+            </span>
+            <h2 className="font-display text-2xl font-semibold tracking-tight">
+              100% offline, no servers
             </h2>
-            <p className="text-xl text-gray-400">
-              Get started in 3 simple steps. No account, no complexity.
+            <p className="mt-3 text-muted leading-relaxed">
+              No accounts. No backend. Everything runs in your browser and stays there. Turn off
+              your connection — EnigmaKeep keeps working exactly the same.
+            </p>
+            <p className="mt-5 font-mono text-xs text-accent tracking-wide">
+              No cloud · No tracking · No telemetry
             </p>
           </div>
-
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="group text-center">
-              <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold shadow-lg shadow-cyan-500/30 group-hover:scale-110 transition-transform duration-300">
-                1
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                Open EnigmaKeep
-              </h3>
-              <p className="text-gray-400">
-                Visit the web app or install as PWA on your device. No account required.
-              </p>
-            </div>
-
-            <div className="group text-center">
-              <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold shadow-lg shadow-cyan-500/30 group-hover:scale-110 transition-transform duration-300">
-                2
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                Create Your Vault
-              </h3>
-              <p className="text-gray-400">
-                Set a master password and get a recovery phrase. Enable biometric unlock.
-              </p>
-            </div>
-
-            <div className="group text-center">
-              <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-6 text-white text-2xl font-bold shadow-lg shadow-cyan-500/30 group-hover:scale-110 transition-transform duration-300">
-                3
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-3">
-                Start Securing
-              </h3>
-              <p className="text-gray-400">
-                Add passwords, generate strong ones, and import from other managers.
-              </p>
-            </div>
-          </div>
         </div>
-      </div>
+      </section>
 
-      {/* CTA Section */}
-      <div className="relative py-24">
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-900 to-slate-950"></div>
-        <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <h2 className="text-4xl md:text-5xl font-bold text-white mb-6 leading-tight">
-            Ready to Secure Your Digital Life?
+      {/* Features */}
+      <section id="features" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-28">
+        <div className="scroll-reveal max-w-2xl">
+          <p className="font-mono text-xs uppercase tracking-widest text-accent mb-3">Features</p>
+          <h2 className="font-display text-3xl md:text-4xl font-semibold tracking-tight">
+            Everything you need in one vault
           </h2>
-          <p className="text-xl md:text-2xl text-gray-300 mb-12">
-            Join thousands using EnigmaKeep for password management.
-            <span className="block mt-2 text-lg text-gray-400">Free forever. No strings attached.</span>
+          <p className="mt-4 text-muted leading-relaxed">
+            Passwords, authenticator, notes, and encrypted files — held together by local-only
+            encryption.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <a
-              href="/app"
-              className="group px-10 py-5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white rounded-xl transition-all duration-300 font-bold shadow-2xl shadow-cyan-500/30 hover:shadow-cyan-500/50 hover:scale-105 flex items-center gap-3 text-lg"
-            >
-              <Download size={24} className="group-hover:animate-bounce" />
-              Get Started Free
-              <ArrowRight size={20} className="group-hover:translate-x-1 transition-transform" />
-            </a>
-            <a
-              href="https://github.com/yourusername/ciphernest"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-8 py-4 border border-gray-600 text-gray-300 rounded-xl hover:bg-gray-800 transition-all duration-200 font-semibold flex items-center gap-2"
-            >
-              <Github size={20} />
-              View on GitHub
-            </a>
+        </div>
+
+        <div className="mt-12 grid sm:grid-cols-2 lg:grid-cols-3 gap-4 vault-stagger">
+          {features.map((feature) => {
+            const Icon = feature.icon;
+            return (
+              <article key={feature.title} className="vault-entry-card p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <span className="w-10 h-10 rounded-xl bg-surface2 border border-line flex items-center justify-center">
+                    <Icon className="text-accent" size={20} />
+                  </span>
+                  {feature.isNew && (
+                    <span className="font-mono text-[10px] uppercase tracking-widest px-2 py-1 rounded-full bg-accent/10 text-accent border border-accent/25">
+                      New
+                    </span>
+                  )}
+                </div>
+                <h3 className="font-display text-lg font-semibold tracking-tight">{feature.title}</h3>
+                <p className="mt-2 text-sm text-muted leading-relaxed">{feature.body}</p>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* Install */}
+      <section id="download" className="border-y border-line bg-bg-deep">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-24">
+          <div className="scroll-reveal max-w-2xl">
+            <p className="font-mono text-xs uppercase tracking-widest text-accent mb-3">Install</p>
+            <h2 className="font-display text-3xl md:text-4xl font-semibold tracking-tight">
+              Runs everywhere you do
+            </h2>
+            <p className="mt-4 text-muted leading-relaxed">
+              Open it in a browser, or install as a PWA for an app icon and full offline use.
+            </p>
+          </div>
+
+          <div className="mt-10 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+            {platforms.map((platform) => (
+              <button
+                key={platform.id}
+                onClick={() => setSelectedPlatform(platform.id)}
+                className="vault-entry-card p-5 text-left group"
+              >
+                <div className="flex items-center justify-between">
+                  <h3 className="font-display font-semibold">{platform.name}</h3>
+                  <ArrowUpRight
+                    size={16}
+                    className="text-muted group-hover:text-accent transition-colors"
+                  />
+                </div>
+                <p className="mt-1 text-sm text-muted">{platform.detail}</p>
+              </button>
+            ))}
           </div>
         </div>
-      </div>
+      </section>
 
-      {/* Footer */}
-      <footer className="relative bg-slate-950 border-t border-gray-800 py-12">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
-                  <Shield className="text-white" size={18} />
-                </div>
-                <div>
-                  <span className="text-xl font-bold text-white">EnigmaKeep</span>
-                  <p className="text-xs text-violet-400">Your Digital Fortress</p>
-                </div>
-              </div>
-              <p className="text-gray-400 text-sm">
-                Open-source, offline-first password manager with zero-knowledge encryption.
-              </p>
-            </div>
+      {/* How it works */}
+      <section id="how" className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-28">
+        <div className="scroll-reveal max-w-2xl">
+          <p className="font-mono text-xs uppercase tracking-widest text-accent mb-3">How it works</p>
+          <h2 className="font-display text-3xl md:text-4xl font-semibold tracking-tight">
+            Three steps, no account
+          </h2>
+        </div>
 
-            <div>
-              <h3 className="text-white font-semibold mb-4">Product</h3>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#features" className="text-gray-400 hover:text-white transition-colors">Features</a></li>
-                <li><a href="#download" className="text-gray-400 hover:text-white transition-colors">Download</a></li>
-                <li><a href="/app" className="text-gray-400 hover:text-white transition-colors">Web App</a></li>
-              </ul>
+        <div className="mt-12 grid md:grid-cols-3 gap-5">
+          {steps.map((step) => (
+            <div key={step.n} className="scroll-reveal vault-entry-card p-8">
+              <span className="font-mono text-sm text-accent">{step.n}</span>
+              <h3 className="mt-4 font-display text-xl font-semibold tracking-tight">{step.title}</h3>
+              <p className="mt-2 text-muted leading-relaxed">{step.body}</p>
             </div>
+          ))}
+        </div>
+      </section>
 
-            <div>
-              <h3 className="text-white font-semibold mb-4">Resources</h3>
-              <ul className="space-y-2 text-sm">
-                <li><a href="#faq" className="text-gray-400 hover:text-white transition-colors">FAQ</a></li>
-                <li><Link href="/blog" className="text-gray-400 hover:text-white transition-colors">Blog</Link></li>
-                <li><a href="https://github.com/hmalvee/EnigmaKeep/issues" className="text-gray-400 hover:text-white transition-colors">Support</a></li>
-                <li><a href="https://github.com/hmalvee/EnigmaKeep" className="text-gray-400 hover:text-white transition-colors">GitHub</a></li>
-              </ul>
-            </div>
-
-            <div>
-              <h3 className="text-white font-semibold mb-4">Legal</h3>
-              <ul className="space-y-2 text-sm">
-                <li><Link href="/privacy" className="text-gray-400 hover:text-white transition-colors">Privacy Policy</Link></li>
-                <li><Link href="/terms" className="text-gray-400 hover:text-white transition-colors">Terms of Service</Link></li>
-                <li><a href="https://github.com/hmalvee/EnigmaKeep/blob/main/LICENSE" className="text-gray-400 hover:text-white transition-colors">License</a></li>
-              </ul>
-            </div>
+      {/* FAQ */}
+      <section id="faq" className="border-t border-line bg-bg-deep">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-28">
+          <div className="scroll-reveal mb-10">
+            <p className="font-mono text-xs uppercase tracking-widest text-accent mb-3">FAQ</p>
+            <h2 className="font-display text-3xl md:text-4xl font-semibold tracking-tight">
+              Questions worth asking
+            </h2>
           </div>
 
-          <div className="border-t border-gray-800 pt-8 flex flex-col md:flex-row items-center justify-between">
-            <div className="text-center md:text-left mb-4 md:mb-0">
-              <p className="text-gray-500 text-sm">
-                © 2025 EnigmaKeep. Open source under MIT License.
-              </p>
-              <p className="text-gray-600 text-xs mt-1">
-                Developed by <a href="https://www.hmalveehasan.com" target="_blank" rel="noopener noreferrer" className="text-violet-400 hover:text-violet-300">HM Alvee Hasan</a>
-              </p>
-            </div>
-            <div className="flex items-center gap-6">
-              <a href="https://github.com/hmalvee/EnigmaKeep" target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-white transition-colors" aria-label="GitHub">
-                <Github size={20} />
+          <div className="divide-y divide-line border-y border-line">
+            {faqs.map((faq, index) => {
+              const open = expandedFaq === index;
+              return (
+                <div key={faq.question} className="scroll-reveal">
+                  <button
+                    onClick={() => setExpandedFaq(open ? null : index)}
+                    className="w-full py-5 flex items-start justify-between gap-4 text-left"
+                    aria-expanded={open}
+                  >
+                    <span className="font-display text-lg font-medium tracking-tight">
+                      {faq.question}
+                    </span>
+                    <span className="mt-1 flex-shrink-0 text-accent">
+                      {open ? <Minus size={18} /> : <Plus size={18} />}
+                    </span>
+                  </button>
+                  {open && (
+                    <p className="pb-6 -mt-1 text-muted leading-relaxed animate-slideIn">
+                      {faq.answer}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      {/* Closing CTA */}
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-20 md:py-28">
+        <div className="scroll-scale relative overflow-hidden rounded-3xl border border-line bg-surface p-10 md:p-16 text-center">
+          <div className="absolute inset-0 ai-grid-bg opacity-20 pointer-events-none" />
+          <div className="ambient-orb top-0 left-1/2 -translate-x-1/2 w-[400px] h-[200px] bg-accent/20" />
+          <div className="relative z-10">
+            <h2 className="font-display text-3xl md:text-4xl font-semibold tracking-tight max-w-2xl mx-auto">
+              Keep your secrets where they belong — with you.
+            </h2>
+            <p className="mt-4 text-muted max-w-xl mx-auto leading-relaxed">
+              Create a vault in under a minute. No email, no payment, no catch.
+            </p>
+            <div className="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3">
+              <a href="/app" className="btn-primary gap-2 group !px-8">
+                Open Vault
+                <ArrowRight size={18} className="group-hover:translate-x-0.5 transition-transform" />
+              </a>
+              <a
+                href={GITHUB_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn-ghost gap-2"
+              >
+                <Github size={18} />
+                Read the source
               </a>
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Footer */}
+      <footer className="border-t border-line bg-bg-deep">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-14">
+          <div className="grid gap-10 md:grid-cols-5">
+            <div className="md:col-span-1">
+              <div className="flex items-center gap-2.5">
+                <span className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
+                  <Shield className="text-accent-ink" size={16} />
+                </span>
+                <span className="font-display font-semibold tracking-tight">EnigmaKeep</span>
+              </div>
+              <p className="mt-4 text-sm text-muted leading-relaxed">
+                Offline, zero-knowledge password manager. Open source, free forever.
+              </p>
+            </div>
+
+            <div>
+              <h3 className="font-mono text-xs uppercase tracking-widest text-muted mb-4">Product</h3>
+              <ul className="space-y-2.5 text-sm">
+                <li><a href="#features" className="text-muted hover:text-ink transition-colors">Features</a></li>
+                <li><a href="#download" className="text-muted hover:text-ink transition-colors">Install</a></li>
+                <li><a href="/app" className="text-muted hover:text-ink transition-colors">Open Vault</a></li>
+                <li><a href="#faq" className="text-muted hover:text-ink transition-colors">FAQ</a></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-mono text-xs uppercase tracking-widest text-muted mb-4">Guides</h3>
+              <ul className="space-y-2.5 text-sm">
+                <li><Link href="/details" className="text-muted hover:text-ink transition-colors">All Guides</Link></li>
+                <li><Link href="/details/password-security-guide" className="text-muted hover:text-ink transition-colors">Password Security</Link></li>
+                <li><Link href="/details/zero-knowledge-encryption" className="text-muted hover:text-ink transition-colors">Zero-Knowledge</Link></li>
+                <li><Link href="/details/offline-password-manager" className="text-muted hover:text-ink transition-colors">Offline Manager</Link></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-mono text-xs uppercase tracking-widest text-muted mb-4">Resources</h3>
+              <ul className="space-y-2.5 text-sm">
+                <li><Link href="/blog" className="text-muted hover:text-ink transition-colors">Blog</Link></li>
+                <li><a href={GITHUB_URL} target="_blank" rel="noopener noreferrer" className="text-muted hover:text-ink transition-colors">GitHub</a></li>
+                <li><a href={`${GITHUB_URL}/issues`} target="_blank" rel="noopener noreferrer" className="text-muted hover:text-ink transition-colors">Support</a></li>
+              </ul>
+            </div>
+
+            <div>
+              <h3 className="font-mono text-xs uppercase tracking-widest text-muted mb-4">Legal</h3>
+              <ul className="space-y-2.5 text-sm">
+                <li><Link href="/privacy" className="text-muted hover:text-ink transition-colors">Privacy</Link></li>
+                <li><Link href="/terms" className="text-muted hover:text-ink transition-colors">Terms</Link></li>
+                <li><a href={`${GITHUB_URL}/blob/main/LICENSE`} target="_blank" rel="noopener noreferrer" className="text-muted hover:text-ink transition-colors">License</a></li>
+              </ul>
+            </div>
+          </div>
+
+          <div className="section-divider my-10" />
+
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <p className="text-sm text-muted">© 2025 EnigmaKeep. Open source under MIT License.</p>
+            <p className="text-sm text-muted">
+              Developed by{' '}
+              <a
+                href="https://www.hmalveehasan.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-accent hover:text-accent-2 transition-colors"
+              >
+                HM Alvee Hasan
+              </a>
+            </p>
           </div>
         </div>
       </footer>
 
-      {/* PWA Install Modal */}
       {selectedPlatform && (
-        <PwaInstallModal
-          platform={selectedPlatform}
-          onClose={() => setSelectedPlatform(null)}
-        />
+        <PwaInstallModal platform={selectedPlatform} onClose={() => setSelectedPlatform(null)} />
       )}
     </div>
   );

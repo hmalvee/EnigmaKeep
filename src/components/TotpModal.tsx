@@ -92,15 +92,15 @@ export function TotpModal({ entry, onSave, onClose }: TotpModalProps) {
   const isFormValid = accountName.trim() && setupKey.trim() && validateSecret(setupKey);
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full">
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between">
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-surface border border-line rounded-2xl shadow-xl max-w-md w-full">
+        <div className="sticky top-0 bg-surface border-b border-line px-6 py-4 flex items-center justify-between">
+          <h2 className="text-xl font-bold text-ink">
             {entry ? 'Edit Account' : 'Add 2FA Account'}
           </h2>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="text-muted hover:text-ink transition-colors"
           >
             <X size={20} />
           </button>
@@ -108,80 +108,80 @@ export function TotpModal({ entry, onSave, onClose }: TotpModalProps) {
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
           {error && (
-            <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-start gap-2">
-              <AlertCircle className="text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" size={18} />
-              <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <div className="p-3 bg-danger/10 border border-danger/30 rounded-lg flex items-start gap-2">
+              <AlertCircle className="text-danger flex-shrink-0 mt-0.5" size={18} />
+              <p className="text-sm text-danger">{error}</p>
             </div>
           )}
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-muted mb-2">
               Account Name
             </label>
             <input
               type="text"
               value={accountName}
               onChange={(e) => setAccountName(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent text-gray-900 dark:text-white"
+              className="ai-input"
               placeholder="Facebook, Google, GitHub..."
               autoFocus
             />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+            <p className="text-xs text-muted mt-1.5">
               Enter the name of the service (e.g., Facebook, Google)
             </p>
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-muted mb-2">
               Setup Key
             </label>
             <textarea
               value={setupKey}
               onChange={(e) => handleSetupKeyChange(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-blue-400 focus:border-transparent text-gray-900 dark:text-white font-mono text-sm resize-none"
+              className="ai-input font-mono text-sm resize-none"
               placeholder="Paste the setup key from Facebook or other service..."
               rows={3}
             />
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+            <p className="text-xs text-muted mt-1.5">
               Copy and paste the setup key provided by the service
             </p>
           </div>
 
           {liveCode && (
-            <div className="p-4 bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl border-2 border-blue-200 dark:border-blue-800">
+            <div className="p-4 bg-accent/10 rounded-xl border-2 border-accent/20">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
-                  <Check size={16} className="text-green-600 dark:text-green-400" />
+                <span className="text-sm font-medium text-muted flex items-center gap-2">
+                  <Check size={16} className="text-success" />
                   Live Code Preview
                 </span>
-                <span className="text-xs text-gray-500 dark:text-gray-400">{timeRemaining}s</span>
+                <span className="text-xs text-muted">{timeRemaining}s</span>
               </div>
               <div className="text-center">
-                <div className="text-4xl font-mono font-bold text-blue-600 dark:text-blue-400 tracking-widest">
+                <div className="text-4xl font-mono font-bold text-accent tracking-widest">
                   {liveCode}
                 </div>
               </div>
-              <div className="mt-3 h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div className="mt-3 h-1.5 bg-surface2 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-blue-500 to-indigo-500 transition-all duration-1000 ease-linear"
+                  className="h-full bg-accent transition-all duration-1000 ease-linear"
                   style={{ width: `${(timeRemaining / period) * 100}%` }}
                 />
               </div>
             </div>
           )}
 
-          <div className="flex gap-3 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex gap-3 pt-4 border-t border-line">
             <button
               type="button"
               onClick={onClose}
-              className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+              className="btn-ghost flex-1"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={!isFormValid}
-              className="flex-1 px-6 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:from-blue-600 disabled:hover:to-indigo-600"
+              className="btn-primary flex-1 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {entry ? 'Save' : 'Add Account'}
             </button>

@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Shield, ArrowRight, Check, Copy, Download, AlertTriangle, ArrowLeft } from 'lucide-react';
 import { generateRecoveryPhrase, deriveKeyFromRecoveryPhrase, splitPhraseIntoWords, getRandomWordIndices } from '../crypto/recoveryPhrase';
 import { PasswordStrengthMeter } from './PasswordStrengthMeter';
 import { calculatePasswordStrength } from '../utils/passwordStrength';
+import { secureCopy } from '../utils/secureClipboard';
 
 interface Props {
   onComplete: (password: string, recoveryPhraseHash: string, fileHandle: FileSystemFileHandle, phrase: string) => void;
@@ -26,12 +27,12 @@ export function CreateVaultFlow({ onComplete, onCancel, error }: Props) {
   const words = splitPhraseIntoWords(recoveryPhrase);
 
   const handlePasswordSubmit = () => {
-    if (password !== confirmPassword || password.length < 8) {
+    if (password !== confirmPassword || password.length < 12) {
       return;
     }
 
     const strength = calculatePasswordStrength(password);
-    if (!strength.meetsMinimum) {
+    if (!strength.meetsMinimum || strength.isCommon) {
       return;
     }
 
@@ -41,7 +42,7 @@ export function CreateVaultFlow({ onComplete, onCancel, error }: Props) {
   };
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(recoveryPhrase);
+    await secureCopy(recoveryPhrase, 60_000);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -102,10 +103,10 @@ Created: ${new Date().toLocaleString()}
 
         if ('showSaveFilePicker' in window) {
           handle = await window.showSaveFilePicker({
-            suggestedName: `vault-${Date.now()}.enc`,
+            suggestedName: `notes-${Date.now()}.dat`,
             types: [{
-              description: 'Encrypted Vault',
-              accept: { 'application/octet-stream': ['.enc'] }
+              description: 'Data File',
+              accept: { 'application/octet-stream': ['.dat'] }
             }]
           });
         }

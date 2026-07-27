@@ -66,21 +66,36 @@ export async function getLastVaultHandle(): Promise<FileSystemFileHandle | null>
   }
 }
 
-export async function verifyHandleAccess(handle: FileSystemFileHandle): Promise<boolean> {
+export async function verifyHandleAccess(
+  handle: FileSystemFileHandle,
+  mode: 'read' | 'readwrite' = 'read'
+): Promise<boolean> {
   try {
-    const permission = await handle.queryPermission({ mode: 'read' });
-    if (permission === 'granted') {
-      await handle.getFile();
-      return true;
+    const h = handle as FileSystemFileHandle & {
+      queryPermission?: (desc: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+      requestPermission?: (desc: { mode?: 'read' | 'readwrite' }) => Promise<PermissionState>;
+    };
+
+    if (h.queryPermission) {
+      const permission = await h.queryPermission({ mode });
+      if (permission === 'granted') {
+        await handle.getFile();
+        return true;
+      }
     }
 
-    const requestedPermission = await handle.requestPermission({ mode: 'read' });
-    if (requestedPermission === 'granted') {
-      await handle.getFile();
-      return true;
+    if (h.requestPermission) {
+      const requestedPermission = await h.requestPermission({ mode });
+      if (requestedPermission === 'granted') {
+        await handle.getFile();
+        return true;
+      }
+      return false;
     }
 
-    return false;
+    // Fallback: try reading the file directly.
+    await handle.getFile();
+    return true;
   } catch (err) {
     return false;
   }

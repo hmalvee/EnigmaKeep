@@ -2,6 +2,7 @@ import { X, Download, Copy, Check } from 'lucide-react';
 import { useState } from 'react';
 import { TotpEntry } from '../types/vault';
 import { generateOtpAuthUri } from '../utils/totp';
+import { secureCopy } from '../utils/secureClipboard';
 
 interface TotpExportModalProps {
   entries: TotpEntry[];
@@ -11,14 +12,14 @@ interface TotpExportModalProps {
 export function TotpExportModal({ entries, onClose }: TotpExportModalProps) {
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
-  const handleCopySetupKey = (entry: TotpEntry) => {
+  const handleCopySetupKey = async (entry: TotpEntry) => {
     const setupKey = `${entry.title}\nSecret: ${entry.secret}${entry.issuer ? `\nIssuer: ${entry.issuer}` : ''}`;
-    navigator.clipboard.writeText(setupKey);
+    await secureCopy(setupKey, 30_000);
     setCopiedId(entry.id);
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleCopyOtpAuthUri = (entry: TotpEntry) => {
+  const handleCopyOtpAuthUri = async (entry: TotpEntry) => {
     const uri = generateOtpAuthUri(
       entry.secret,
       entry.issuer || entry.title,
@@ -29,7 +30,7 @@ export function TotpExportModal({ entries, onClose }: TotpExportModalProps) {
         period: entry.period
       }
     );
-    navigator.clipboard.writeText(uri);
+    await secureCopy(uri, 30_000);
     setCopiedId(entry.id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -59,20 +60,20 @@ export function TotpExportModal({ entries, onClose }: TotpExportModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="sticky top-0 bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 px-6 py-4 flex items-center justify-between z-10">
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+      <div className="bg-surface border border-line rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+        <div className="sticky top-0 bg-surface border-b border-line px-6 py-4 flex items-center justify-between z-10">
           <div>
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+            <h2 className="text-2xl font-bold text-ink">
               Export 2FA Setup Keys
             </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            <p className="text-sm text-muted mt-1">
               {entries.length} code{entries.length !== 1 ? 's' : ''} selected
             </p>
           </div>
           <button
             onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="text-muted hover:text-ink transition-colors"
           >
             <X size={24} />
           </button>
@@ -82,31 +83,31 @@ export function TotpExportModal({ entries, onClose }: TotpExportModalProps) {
           {entries.map((entry) => (
             <div
               key={entry.id}
-              className="bg-gray-50 dark:bg-gray-700/50 rounded-xl border border-gray-200 dark:border-gray-600 p-5"
+              className="bg-surface2 rounded-xl border border-line p-5"
             >
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                  <h3 className="text-lg font-semibold text-ink">
                     {entry.title}
                   </h3>
                   {entry.issuer && (
-                    <p className="text-sm text-gray-500 dark:text-gray-400">{entry.issuer}</p>
+                    <p className="text-sm text-muted">{entry.issuer}</p>
                   )}
                 </div>
               </div>
 
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                  <label className="block text-xs font-medium text-muted mb-1">
                     Secret Key
                   </label>
                   <div className="flex items-center gap-2">
-                    <code className="flex-1 px-3 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-mono text-gray-900 dark:text-white break-all">
+                    <code className="flex-1 px-3 py-2 bg-surface border border-line rounded-lg text-sm font-mono text-ink break-all">
                       {entry.secret}
                     </code>
                     <button
                       onClick={() => handleCopySetupKey(entry)}
-                      className="px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center gap-2 text-sm font-medium flex-shrink-0"
+                      className="px-3 py-2 bg-accent text-accent-ink rounded-lg hover:bg-accent-2 transition-colors flex items-center gap-2 text-sm font-medium flex-shrink-0"
                     >
                       {copiedId === entry.id ? (
                         <>
@@ -126,13 +127,13 @@ export function TotpExportModal({ entries, onClose }: TotpExportModalProps) {
                 <div className="pt-2">
                   <button
                     onClick={() => handleCopyOtpAuthUri(entry)}
-                    className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                    className="text-sm text-accent hover:underline flex items-center gap-1"
                   >
                     Copy as OTP Auth URI
                   </button>
                 </div>
 
-                <div className="pt-2 border-t border-gray-200 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                <div className="pt-2 border-t border-line text-xs text-muted space-y-1">
                   <p>Algorithm: {entry.algorithm || 'SHA1'}</p>
                   <p>Digits: {entry.digits || 6}</p>
                   <p>Period: {entry.period || 30}s</p>
@@ -142,16 +143,16 @@ export function TotpExportModal({ entries, onClose }: TotpExportModalProps) {
           ))}
         </div>
 
-        <div className="border-t border-gray-200 dark:border-gray-700 px-6 py-4 flex gap-3">
+        <div className="border-t border-line px-6 py-4 flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
+            className="btn-ghost flex-1"
           >
             Close
           </button>
           <button
             onClick={handleExportAll}
-            className="flex-1 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center justify-center gap-2"
+            className="btn-primary flex-1 gap-2"
           >
             <Download size={18} />
             Export All as Text File

@@ -99,13 +99,16 @@ export async function calculateSecurityMetrics(
   }
 
   const protections = [
-    'AES-256-GCM encryption',
-    `PBKDF2 with ${kdfIterations.toLocaleString()} iterations`,
-    'Device fingerprint binding',
-    'Cryptographic signature verification',
-    'SHA-512 integrity checks',
-    'Random salt per vault',
+    'AES-256-GCM authenticated encryption',
+    `PBKDF2-SHA256 with ${kdfIterations.toLocaleString()} iterations`,
+    'Opaque high-entropy .dat (no magic / banners / JSON)',
+    'Length fields XOR-masked with salt',
+    '1:1 ciphertext size (no text-wrapper bloat)',
+    'Derived recovery encryption key (PBKDF2 600k)',
+    'Random 256-bit salt per vault',
     'Unique IV per encryption',
+    'Session secrets outside React state',
+    'Unlock attempt backoff',
   ];
 
   let securityLevel: string;

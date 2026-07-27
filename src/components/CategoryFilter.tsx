@@ -7,15 +7,15 @@ interface CategoryFilterProps {
 }
 
 const CATEGORY_COLORS: { [key: string]: string } = {
-  'Work': 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  'Personal': 'bg-green-500/20 text-green-400 border-green-500/30',
-  'Banking': 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-  'Social': 'bg-pink-500/20 text-pink-400 border-pink-500/30',
-  'Shopping': 'bg-orange-500/20 text-orange-400 border-orange-500/30',
-  'Entertainment': 'bg-red-500/20 text-red-400 border-red-500/30',
-  'Email': 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-  'Development': 'bg-indigo-500/20 text-indigo-400 border-indigo-500/30',
-  'Other': 'bg-gray-500/20 text-gray-400 border-gray-500/30',
+  'Work': 'bg-accent/10 text-accent border-accent/20',
+  'Personal': 'bg-success/10 text-success border-success/30',
+  'Banking': 'bg-slate/10 text-slate border-slate/30',
+  'Social': 'bg-accent-2/10 text-accent-2 border-accent-2/30',
+  'Shopping': 'bg-accent-2/10 text-accent-2 border-accent-2/30',
+  'Entertainment': 'bg-danger/10 text-danger border-danger/30',
+  'Email': 'bg-accent/10 text-accent border-accent/20',
+  'Development': 'bg-accent/10 text-accent border-accent/20',
+  'Other': 'bg-surface2 text-muted border-line',
 };
 
 export function CategoryFilter({ categories, selectedCategory, onSelectCategory }: CategoryFilterProps) {
@@ -29,7 +29,7 @@ export function CategoryFilter({ categories, selectedCategory, onSelectCategory 
 
   return (
     <div className="flex items-center gap-2 flex-wrap">
-      <div className="flex items-center gap-2 text-gray-400 text-sm">
+      <div className="flex items-center gap-2 text-muted text-sm">
         <Tag size={16} />
         <span>Categories:</span>
       </div>
@@ -38,8 +38,8 @@ export function CategoryFilter({ categories, selectedCategory, onSelectCategory 
         onClick={() => onSelectCategory(null)}
         className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
           selectedCategory === null
-            ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30'
-            : 'bg-gray-700 text-gray-400 border border-gray-600 hover:border-gray-500'
+            ? 'bg-accent/10 text-accent border border-accent/20'
+            : 'bg-surface2 text-muted border border-line hover:border-accent/40'
         }`}
       >
         All
@@ -52,7 +52,7 @@ export function CategoryFilter({ categories, selectedCategory, onSelectCategory 
           className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 border ${
             selectedCategory === category
               ? getCategoryStyle(category)
-              : 'bg-gray-700 text-gray-400 border-gray-600 hover:border-gray-500'
+              : 'bg-surface2 text-muted border-line hover:border-accent/40'
           }`}
         >
           {category}
@@ -62,7 +62,7 @@ export function CategoryFilter({ categories, selectedCategory, onSelectCategory 
       {selectedCategory && (
         <button
           onClick={() => onSelectCategory(null)}
-          className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+          className="p-1.5 text-muted hover:text-ink hover:bg-surface2 rounded-lg transition-colors"
           title="Clear filter"
         >
           <X size={16} />

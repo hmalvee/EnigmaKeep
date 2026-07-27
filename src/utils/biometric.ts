@@ -115,29 +115,157 @@ export function isBiometricEnabled(): boolean {
   return localStorage.getItem('biometric_enabled') === 'true';
 }
 
-export function disableBiometric(): void {
+// IndexedDB-backed key store for biometric encryption
+const BIOMETRIC_DB_NAME = 'BiometricKeyStore';
+const BIOMETRIC_DB_VERSION = 1;
+const BIOMETRIC_STORE_NAME = 'keys';
+const BIOMETRIC_KEY_ID = 'biometric-encryption-key';
+
+async function openBiometricKeyDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(BIOMETRIC_DB_NAME, BIOMETRIC_DB_VERSION);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => resolve(request.result);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(BIOMETRIC_STORE_NAME)) {
+        db.createObjectStore(BIOMETRIC_STORE_NAME);
+      }
+    };
+  });
+}
+
+async function getOrCreateBiometricKey(): Promise<CryptoKey> {
+  const db = await openBiometricKeyDB();
+
+  try {
+    // Try to retrieve existing key
+    const existingKey = await new Promise<CryptoKey | undefined>((resolve, reject) => {
+      const tx = db.transaction(BIOMETRIC_STORE_NAME, 'readonly');
+      const store = tx.objectStore(BIOMETRIC_STORE_NAME);
+      const request = store.get(BIOMETRIC_KEY_ID);
+      request.onsuccess = () => resolve(request.result as CryptoKey | undefined);
+      request.onerror = () => reject(request.error);
+    });
+
+    if (existingKey) {
+      return existingKey;
+    }
+
+    // Generate a new AES-GCM key (non-exportable)
+    const key = await crypto.subtle.generateKey(
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+
+    // Store the key in IndexedDB
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(BIOMETRIC_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(BIOMETRIC_STORE_NAME);
+      const request = store.put(key, BIOMETRIC_KEY_ID);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+
+    return key;
+  } finally {
+    db.close();
+  }
+}
+
+async function encryptForBiometric(plaintext: string): Promise<string> {
+  const key = await getOrCreateBiometricKey();
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encoded = new TextEncoder().encode(plaintext);
+  const ciphertext = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    encoded
+  );
+  // Combine IV + ciphertext as base64
+  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+  combined.set(iv);
+  combined.set(new Uint8Array(ciphertext), iv.length);
+  const binary = String.fromCharCode(...combined);
+  return btoa(binary);
+}
+
+async function decryptForBiometric(encryptedBase64: string): Promise<string> {
+  const key = await getOrCreateBiometricKey();
+  const binary = atob(encryptedBase64);
+  const combined = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    combined[i] = binary.charCodeAt(i);
+  }
+  const iv = combined.slice(0, 12);
+  const ciphertext = combined.slice(12);
+  const decrypted = await crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv },
+    key,
+    ciphertext
+  );
+  return new TextDecoder().decode(decrypted);
+}
+
+async function deleteBiometricKey(): Promise<void> {
+  try {
+    const db = await openBiometricKeyDB();
+    await new Promise<void>((resolve, reject) => {
+      const tx = db.transaction(BIOMETRIC_STORE_NAME, 'readwrite');
+      const store = tx.objectStore(BIOMETRIC_STORE_NAME);
+      const request = store.delete(BIOMETRIC_KEY_ID);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+    db.close();
+  } catch (error) {
+    console.error('Failed to delete biometric key:', error);
+  }
+}
+
+export async function disableBiometric(): Promise<void> {
   localStorage.removeItem('biometric_credential_id');
   localStorage.removeItem('biometric_enabled');
   clearBiometricVaultData();
+  await deleteBiometricKey();
 }
 
 export function clearBiometricVaultData(): void {
   localStorage.removeItem('vault_password_encrypted');
+  // Legacy: full vault ciphertext used to be cached here — always purge it.
   localStorage.removeItem('vault_file_data');
 }
 
-export async function updateBiometricVaultData(password: string, vaultData: string, fileName: string): Promise<boolean> {
+/**
+ * Store only the master password (wrapped with a non-exportable IndexedDB key).
+ * The vault file itself must be read from the File System handle — never cached
+ * as a second plaintext-adjacent copy in localStorage.
+ */
+export async function updateBiometricVaultData(password: string): Promise<boolean> {
   if (!isBiometricEnabled()) {
     return false;
   }
 
   try {
-    localStorage.setItem('vault_password_encrypted', btoa(password));
-    localStorage.setItem('vault_file_data', JSON.stringify({ name: fileName, content: vaultData }));
+    const encryptedPassword = await encryptForBiometric(password);
+    localStorage.setItem('vault_password_encrypted', encryptedPassword);
+    localStorage.removeItem('vault_file_data');
     return true;
   } catch (error) {
     console.error('Failed to update biometric vault data:', error);
     return false;
+  }
+}
+
+export async function decryptBiometricPassword(): Promise<string | null> {
+  const stored = localStorage.getItem('vault_password_encrypted');
+  if (!stored) return null;
+  try {
+    return await decryptForBiometric(stored);
+  } catch (error) {
+    console.error('Failed to decrypt biometric password:', error);
+    return null;
   }
 }
 

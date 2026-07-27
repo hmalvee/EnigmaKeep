@@ -52,8 +52,8 @@ export function BiometricSetup({ username, onComplete }: BiometricSetupProps) {
     }
   };
 
-  const handleDisableBiometric = () => {
-    disableBiometric();
+  const handleDisableBiometric = async () => {
+    await disableBiometric();
     setIsEnabled(false);
     setSuccess('Biometric authentication disabled');
     setTimeout(() => setSuccess(''), 2000);
@@ -61,15 +61,15 @@ export function BiometricSetup({ username, onComplete }: BiometricSetupProps) {
 
   if (!isSupported) {
     return (
-      <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+      <div className="bg-surface border border-line rounded-xl p-6">
         <div className="flex items-start gap-3">
-          <Shield className="text-gray-500 flex-shrink-0 mt-0.5" size={24} />
+          <Shield className="text-muted flex-shrink-0 mt-0.5" size={24} />
           <div>
-            <h3 className="text-lg font-semibold text-white mb-2">Biometric Authentication</h3>
-            <p className="text-gray-400 text-sm">
+            <h3 className="text-lg font-semibold text-ink mb-2">Biometric Authentication</h3>
+            <p className="text-muted text-sm">
               Biometric authentication is not available on this device. This feature requires:
             </p>
-            <ul className="list-disc list-inside text-gray-400 text-sm mt-2 space-y-1">
+            <ul className="list-disc list-inside text-muted text-sm mt-2 space-y-1">
               <li>A device with fingerprint or face recognition</li>
               <li>A secure HTTPS connection</li>
               <li>Browser support for Web Authentication API</li>
@@ -81,29 +81,29 @@ export function BiometricSetup({ username, onComplete }: BiometricSetupProps) {
   }
 
   return (
-    <div className="bg-gray-800 border border-gray-700 rounded-xl p-6">
+    <div className="bg-surface border border-line rounded-xl p-6">
       <div className="flex items-start gap-4">
-        <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
-          <Fingerprint className="text-white" size={24} />
+        <div className="w-12 h-12 bg-accent rounded-xl flex items-center justify-center flex-shrink-0">
+          <Fingerprint className="text-accent-ink" size={24} />
         </div>
 
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-white mb-2">Biometric Authentication</h3>
-          <p className="text-gray-400 text-sm mb-4">
+          <h3 className="text-lg font-semibold text-ink mb-2">Biometric Authentication</h3>
+          <p className="text-muted text-sm mb-4">
             {isEnabled
               ? 'Quick unlock with your fingerprint or face recognition'
               : 'Enable biometric authentication for faster, more secure access to your vault'}
           </p>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-900/20 border border-red-500/30 rounded-lg text-red-400 text-sm flex items-start gap-2">
+            <div className="mb-4 p-3 bg-danger/10 border border-danger/30 rounded-lg text-danger text-sm flex items-start gap-2">
               <X size={16} className="flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
           )}
 
           {success && (
-            <div className="mb-4 p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-green-400 text-sm flex items-start gap-2">
+            <div className="mb-4 p-3 bg-success/10 border border-success/30 rounded-lg text-success text-sm flex items-start gap-2">
               <Check size={16} className="flex-shrink-0 mt-0.5" />
               <span>{success}</span>
             </div>
@@ -114,20 +114,20 @@ export function BiometricSetup({ username, onComplete }: BiometricSetupProps) {
               <button
                 onClick={handleEnableBiometric}
                 disabled={isLoading}
-                className="px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg transition-all duration-200 font-medium shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                className="btn-primary gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Fingerprint size={18} />
                 {isLoading ? 'Setting up...' : 'Enable Biometric Login'}
               </button>
             ) : (
               <>
-                <div className="flex items-center gap-2 text-green-400 text-sm">
+                <div className="flex items-center gap-2 text-success text-sm">
                   <Check size={18} />
                   <span>Enabled</span>
                 </div>
                 <button
                   onClick={handleDisableBiometric}
-                  className="px-4 py-2.5 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-all duration-200 font-medium"
+                  className="btn-ghost"
                 >
                   Disable
                 </button>
@@ -135,8 +135,8 @@ export function BiometricSetup({ username, onComplete }: BiometricSetupProps) {
             )}
           </div>
 
-          <div className="mt-4 pt-4 border-t border-gray-700">
-            <p className="text-xs text-gray-500">
+          <div className="mt-4 pt-4 border-t border-line">
+            <p className="text-xs text-muted">
               Your biometric data never leaves your device. We use the Web Authentication API (WebAuthn) for secure, privacy-preserving authentication.
             </p>
           </div>

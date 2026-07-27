@@ -33,24 +33,24 @@ export function OfflineIndicator() {
       <div
         className={`px-4 py-3 rounded-lg shadow-lg border flex items-center gap-3 ${
           isOnline
-            ? 'bg-emerald-900/90 border-emerald-500/50 text-emerald-100'
-            : 'bg-gray-800/90 border-gray-600/50 text-gray-200'
+            ? 'bg-success/10 border-success/30 text-success'
+            : 'bg-surface border-line text-ink'
         }`}
       >
         {isOnline ? (
           <>
-            <Wifi size={20} className="text-emerald-400" />
+            <Wifi size={20} className="text-success" />
             <div>
               <p className="font-medium">Back Online</p>
-              <p className="text-xs text-emerald-300">Connection restored</p>
+              <p className="text-xs text-success">Connection restored</p>
             </div>
           </>
         ) : (
           <>
-            <WifiOff size={20} className="text-gray-400" />
+            <WifiOff size={20} className="text-muted" />
             <div>
               <p className="font-medium">Offline Mode</p>
-              <p className="text-xs text-gray-400">Working without internet</p>
+              <p className="text-xs text-muted">Working without internet</p>
             </div>
           </>
         )}

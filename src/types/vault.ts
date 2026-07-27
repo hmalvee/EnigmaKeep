@@ -48,11 +48,36 @@ export interface TotpEntry {
   updatedAt: number;
 }
 
+export interface StoredFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  /** Base64-encoded file bytes, encrypted at rest as part of the vault blob. */
+  data: string;
+  /** Parent folder id, or null when the file lives at the vault root. */
+  folderId?: string | null;
+  notes?: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface VaultFolder {
+  id: string;
+  name: string;
+  /** Parent folder id, or null for a top-level folder. */
+  parentId: string | null;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface VaultData {
   version: number;
   entries: PasswordEntry[];
   notes?: Note[];
   totpEntries?: TotpEntry[];
+  files?: StoredFile[];
+  folders?: VaultFolder[];
   categories?: string[];
   createdAt: number;
   updatedAt: number;
@@ -60,6 +85,8 @@ export interface VaultData {
   lastBackup?: number;
   encryptionType?: string;
   kdfIterations?: number;
+  /** Persisted lock / clipboard preferences (encrypted with the vault). */
+  settings?: VaultSettings;
 }
 
 export interface VaultSettings {

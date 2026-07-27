@@ -1,117 +1,96 @@
-import { Lock, FileText, Settings, Shield, X } from 'lucide-react';
+import { KeyRound, FileText, ShieldCheck, FolderLock, Settings, X } from 'lucide-react';
+
+type View = 'passwords' | 'notes' | 'totp' | 'files' | 'settings';
 
 interface SidebarProps {
-  currentView: 'passwords' | 'notes' | 'totp' | 'settings';
-  onViewChange: (view: 'passwords' | 'notes' | 'totp' | 'settings') => void;
+  currentView: View;
+  onViewChange: (view: View) => void;
   passwordCount: number;
   noteCount: number;
   totpCount: number;
+  fileCount: number;
   isOpen?: boolean;
   onClose?: () => void;
 }
 
-export function Sidebar({ currentView, onViewChange, passwordCount, noteCount, totpCount, isOpen = true, onClose }: SidebarProps) {
+export function Sidebar({
+  currentView,
+  onViewChange,
+  passwordCount,
+  noteCount,
+  totpCount,
+  fileCount,
+  isOpen = true,
+  onClose
+}: SidebarProps) {
   const menuItems = [
-    {
-      id: 'passwords' as const,
-      icon: Lock,
-      label: 'Passwords',
-      count: passwordCount,
-      color: 'cyan'
-    },
-    {
-      id: 'totp' as const,
-      icon: Shield,
-      label: '2FA Codes',
-      count: totpCount,
-      color: 'blue'
-    },
-    {
-      id: 'notes' as const,
-      icon: FileText,
-      label: 'Notes',
-      count: noteCount,
-      color: 'emerald'
-    }
+    { id: 'passwords' as const, icon: KeyRound, label: 'Passwords', count: passwordCount },
+    { id: 'totp' as const, icon: ShieldCheck, label: '2FA Codes', count: totpCount },
+    { id: 'notes' as const, icon: FileText, label: 'Notes', count: noteCount },
+    { id: 'files' as const, icon: FolderLock, label: 'Files', count: fileCount }
   ];
 
-  const handleViewChange = (view: 'passwords' | 'notes' | 'totp' | 'settings') => {
+  const handleViewChange = (view: View) => {
     onViewChange(view);
-    if (onClose) {
-      onClose();
-    }
+    onClose?.();
   };
 
   return (
     <>
-      {/* Overlay for mobile */}
       {isOpen && onClose && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 md:hidden"
+          className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-40 md:hidden animate-fadeIn"
           onClick={onClose}
         />
       )}
 
-      {/* Sidebar */}
-      <aside className={`
-        fixed md:static inset-y-0 left-0 z-50
-        w-64 bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-700
-        flex flex-col
-        transform transition-transform duration-300 ease-in-out
-        ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
-      `}>
-        {/* Logo/Header */}
-        <div className="p-6 border-b border-gray-200 dark:border-gray-700">
+      <aside
+        className={`
+          fixed md:static inset-y-0 left-0 z-50
+          w-64 bg-surface/95 backdrop-blur-xl border-r border-line flex flex-col
+          transform transition-transform duration-300 ease-out
+          ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
+        `}
+      >
+        <div className="p-5 border-b border-line">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-violet-600 to-purple-600 rounded-xl flex items-center justify-center">
-                <span className="text-white font-bold text-xl">E</span>
+              <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center shadow-[0_8px_20px_-10px_rgb(var(--accent)/0.7)] animate-soft-glow">
+                <KeyRound className="text-accent-ink" size={20} />
               </div>
               <div>
-                <h2 className="font-bold text-gray-900 dark:text-white">EnigmaKeep</h2>
-                <p className="text-xs text-gray-500 dark:text-gray-400">Your Vault</p>
+                <h2 className="font-display font-semibold text-ink leading-none">EnigmaKeep</h2>
+                <p className="text-[11px] text-muted mt-1 tracking-wide">Vault unlocked</p>
               </div>
             </div>
             {onClose && (
-              <button
-                onClick={onClose}
-                className="md:hidden text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-              >
-                <X size={24} />
+              <button onClick={onClose} className="md:hidden text-muted hover:text-ink">
+                <X size={22} />
               </button>
             )}
           </div>
         </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 p-4 overflow-y-auto">
-          <ul className="space-y-2">
+        <nav className="flex-1 p-3 overflow-y-auto flex flex-col">
+          <ul className="space-y-1">
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentView === item.id;
-              const colorClasses = {
-                cyan: isActive
-                  ? 'bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                blue: isActive
-                  ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50',
-                emerald: isActive
-                  ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-              };
-
               return (
                 <li key={item.id}>
                   <button
                     onClick={() => handleViewChange(item.id)}
-                    className={`w-full flex items-center justify-between px-4 py-3 rounded-lg transition-all duration-200 ${colorClasses[item.color]}`}
+                    className={`nav-item ${isActive ? 'nav-item-active' : ''}`}
                   >
-                    <div className="flex items-center gap-3">
-                      <Icon size={20} />
-                      <span className="font-medium">{item.label}</span>
-                    </div>
-                    <span className="text-sm font-semibold bg-white dark:bg-gray-800 px-2 py-1 rounded-md">
+                    <span className="flex items-center gap-3">
+                      <Icon size={18} className={isActive ? 'scale-105' : ''} />
+                      <span className="font-medium text-sm">{item.label}</span>
+                    </span>
+                    <span
+                      className={`text-xs font-semibold px-2 py-0.5 rounded-md tabular-nums ${
+                        isActive ? 'bg-accent/15 text-accent' : 'bg-surface2 text-muted'
+                      }`}
+                    >
                       {item.count}
                     </span>
                   </button>
@@ -120,18 +99,15 @@ export function Sidebar({ currentView, onViewChange, passwordCount, noteCount, t
             })}
           </ul>
 
-          {/* Settings at bottom of nav */}
-          <div className="mt-auto pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="mt-auto pt-3 border-t border-line">
             <button
               onClick={() => handleViewChange('settings')}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 ${
-                currentView === 'settings'
-                  ? 'bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700/50'
-              }`}
+              className={`nav-item ${currentView === 'settings' ? 'nav-item-active' : ''}`}
             >
-              <Settings size={20} />
-              <span className="font-medium">Settings</span>
+              <span className="flex items-center gap-3">
+                <Settings size={18} />
+                <span className="font-medium text-sm">Settings</span>
+              </span>
             </button>
           </div>
         </nav>

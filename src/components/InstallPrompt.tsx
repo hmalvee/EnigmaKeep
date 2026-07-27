@@ -53,37 +53,37 @@ export function InstallPrompt() {
 
   return (
     <div className="fixed bottom-6 left-6 right-6 md:left-auto md:right-6 md:w-96 z-50 animate-slideIn">
-      <div className="bg-gradient-to-br from-gray-800 to-gray-900 border border-gray-700 rounded-2xl shadow-2xl p-6">
+      <div className="bg-surface border border-line rounded-2xl shadow-2xl p-6">
         <button
           onClick={handleDismiss}
-          className="absolute top-4 right-4 p-1 text-gray-400 hover:text-white transition-colors"
+          className="absolute top-4 right-4 p-1 text-muted hover:text-ink transition-colors"
         >
           <X size={18} />
         </button>
 
         <div className="flex items-start gap-4 mb-4">
-          <div className="w-12 h-12 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
-            <Smartphone className="text-white" size={24} />
+          <div className="w-12 h-12 bg-accent rounded-xl flex items-center justify-center flex-shrink-0">
+            <Smartphone className="text-accent-ink" size={24} />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-white mb-1">Install EnigmaKeep</h3>
-            <p className="text-sm text-gray-400">
+            <h3 className="text-lg font-bold text-ink mb-1">Install EnigmaKeep</h3>
+            <p className="text-sm text-muted">
               Add to your home screen for quick access and offline support
             </p>
           </div>
         </div>
 
-        <div className="space-y-2 mb-4 text-sm text-gray-400">
+        <div className="space-y-2 mb-4 text-sm text-muted">
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>
+            <div className="w-1.5 h-1.5 bg-accent rounded-full"></div>
             <span>Works offline</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>
+            <div className="w-1.5 h-1.5 bg-accent rounded-full"></div>
             <span>Faster loading</span>
           </div>
           <div className="flex items-center gap-2">
-            <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>
+            <div className="w-1.5 h-1.5 bg-accent rounded-full"></div>
             <span>App-like experience</span>
           </div>
         </div>
@@ -91,13 +91,13 @@ export function InstallPrompt() {
         <div className="flex gap-3">
           <button
             onClick={handleDismiss}
-            className="flex-1 px-4 py-2.5 border border-gray-600 text-gray-300 rounded-lg hover:bg-gray-700 transition-all duration-200 font-medium"
+            className="btn-ghost flex-1"
           >
             Maybe Later
           </button>
           <button
             onClick={handleInstall}
-            className="flex-1 px-4 py-2.5 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-lg transition-all duration-200 font-medium shadow-md hover:shadow-lg flex items-center justify-center gap-2"
+            className="btn-primary flex-1 gap-2"
           >
             <Download size={18} />
             Install
