@@ -1,0 +1,10 @@
+# EnigmaKeep security disclosure policy — RFC 9116
+# https://www.enigmakeep.com/.well-known/security.txt
+
+Contact: https://github.com/hmalvee/EnigmaKeep/security/advisories/new
+Contact: mailto:security@enigmakeep.com
+Expires: 2027-10-22T00:00:00.000Z
+Preferred-Languages: en
+Canonical: https://www.enigmakeep.com/.well-known/security.txt
+Policy: https://github.com/hmalvee/EnigmaKeep/blob/main/SECURITY.md
+Acknowledgments: https://github.com/hmalvee/EnigmaKeep/blob/main/SECURITY.md#hall-of-thanks

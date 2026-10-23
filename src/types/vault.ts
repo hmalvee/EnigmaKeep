@@ -1,3 +1,5 @@
+import type { SocialRecoveryConfig } from '../crypto/socialRecovery';
+
 export type EntryType = 'password' | 'note' | 'card' | 'totp';
 
 export interface PasswordHistory {
@@ -82,11 +84,40 @@ export interface VaultData {
   createdAt: number;
   updatedAt: number;
   recoveryPhraseHash?: string;
+  /**
+   * Key derived from the recovery phrase, used to re-encrypt the recovery
+   * block on every save. Only ever stored inside the encrypted vault.
+   */
+  recoveryEncKey?: string;
+  /**
+   * Secret Key (display form) required with the master password. Kept here so
+   * it can be shown again and survives phrase recovery; the copy that matters
+   * for security lives on the user's devices and Emergency Kit.
+   */
+  secretKey?: string;
+  /** Delayed guardian recovery (see crypto/socialRecovery.ts). */
+  socialRecovery?: SocialRecoveryConfig;
+  /**
+   * Decoy vault opened by a duress password. When set, this (real) vault lives
+   * hidden in the file's padding region and the visible blocks hold the decoy.
+   */
+  decoy?: DecoyConfig;
+  /** Random id assigned on first save; keys this device's rollback record. */
+  vaultId?: string;
+  /** Monotonic save counter and random id of the last save (rollback detection). */
+  saveCount?: number;
+  saveId?: string;
   lastBackup?: number;
   encryptionType?: string;
   kdfIterations?: number;
   /** Persisted lock / clipboard preferences (encrypted with the vault). */
   settings?: VaultSettings;
+}
+
+export interface DecoyConfig {
+  /** The duress password, kept so the decoy can be re-keyed; only ever stored inside the encrypted real vault. */
+  password: string;
+  createdAt: number;
 }
 
 export interface VaultSettings {

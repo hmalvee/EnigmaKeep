@@ -2,17 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <script>
-      (function () {
-        try {
-          var t = localStorage.getItem('theme') || 'system';
-          var dark = t === 'dark' || (t === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
-          if (dark) document.documentElement.classList.add('dark');
-          else document.documentElement.classList.remove('dark');
-          document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
-        } catch (e) {}
-      })();
-    </script>
+    <script src="/theme-init.js"></script>
 
     <!-- Primary Meta Tags -->
     <title>EnigmaKeep - Your Digital Fortress | 100% Offline Password Manager</title>
@@ -20,7 +10,7 @@
     <meta name="description" content="EnigmaKeep: 100% offline password manager with zero-knowledge encryption. Your digital fortress for complete privacy. No cloud, no tracking, open source." />
     <meta name="keywords" content="password manager, offline password manager, secure password vault, biometric authentication, zero-knowledge encryption, privacy-first vault, open source password manager, PWA password manager, password generator, EnigmaKeep, secure password storage, 2FA authenticator" />
     <meta name="author" content="EnigmaKeep" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website" />
@@ -44,6 +34,9 @@
     <meta property="twitter:image" content="https://www.enigmakeep.com/icons/icon-512x512.png" />
     <meta property="twitter:image:alt" content="EnigmaKeep password manager shield icon" />
 
+    <link rel="preload" href="/assets/google-sans-400.woff2" as="font" type="font/woff2" crossorigin />
+    <link rel="preload" href="/assets/google-sans-500.woff2" as="font" type="font/woff2" crossorigin />
+
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/icons/icon.svg" />
     <link rel="icon" type="image/png" sizes="16x16" href="/icons/icon-96x96.png" />
@@ -52,8 +45,8 @@
     <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
 
     <!-- PWA -->
-    <meta name="theme-color" content="#f6f4f0" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#0e1013" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#f4f6fb" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#01061a" media="(prefers-color-scheme: dark)" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="EnigmaKeep" />
@@ -64,7 +57,7 @@
 
     <!-- Security -->
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:;" />
+    <!-- Content-Security-Policy is injected at build time (see vite.config.ts). -->
 
     <!-- Canonical URL -->
     <link rel="canonical" href="https://www.enigmakeep.com/" />
@@ -74,11 +67,6 @@
     <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
     <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
     <meta name="bingbot" content="index, follow" />
-    <meta name="GPTBot" content="allow" />
-    <meta name="ChatGPTBot" content="allow" />
-    <meta name="CCBot" content="allow" />
-    <meta name="anthropic-ai" content="allow" />
-    <meta name="PerplexityBot" content="allow" />
     <meta name="subject" content="EnigmaKeep is a 100% offline, zero-knowledge password manager with biometric authentication." />
     <meta name="topic" content="Password management and digital privacy" />
     <meta name="audience" content="Security-conscious users, privacy advocates, businesses" />
@@ -109,11 +97,6 @@
           "description": "100% offline password manager with zero-knowledge encryption. Your digital fortress for complete privacy. No cloud, no tracking, open source.",
           "screenshot": "https://www.enigmakeep.com/icons/icon-512x512.png",
           "softwareVersion": "1.0.0",
-          "aggregateRating": {
-            "@type": "AggregateRating",
-            "ratingValue": "5.0",
-            "ratingCount": "500"
-          },
           "featureList": [
             "Zero-knowledge encryption",
             "Biometric authentication",
@@ -139,34 +122,75 @@
               "@type": "ImageObject",
               "url": "https://www.enigmakeep.com/icons/icon-512x512.png"
             }
-          },
-          "potentialAction": {
-            "@type": "SearchAction",
-            "target": "https://www.enigmakeep.com/search?q={search_term_string}",
-            "query-input": "required name=search_term_string"
           }
         },
         {
-          "@type": "BreadcrumbList",
-          "@id": "https://www.enigmakeep.com/#breadcrumbs",
-          "itemListElement": [
+          "@type": "FAQPage",
+          "@id": "https://www.enigmakeep.com/#faq",
+          "mainEntity": [
             {
-              "@type": "ListItem",
-              "position": 1,
-              "name": "Home",
-              "item": "https://www.enigmakeep.com/"
+              "@type": "Question",
+              "name": "How does EnigmaKeep keep my passwords secure?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Everything is encrypted with AES-256-GCM. Your master password is stretched into a key using PBKDF2-SHA256 with 600,000 iterations, and that key never leaves your device. Because encryption and decryption happen locally, EnigmaKeep follows a zero-knowledge model: there is no server that could read your data even in principle."
+              }
             },
             {
-              "@type": "ListItem",
-              "position": 2,
-              "name": "Features",
-              "item": "https://www.enigmakeep.com/#features"
+              "@type": "Question",
+              "name": "Is my data really stored offline?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. Your vault lives encrypted on your device, and you can save it as a file. Nothing is transmitted to a server — you can confirm this yourself by watching the network tab. EnigmaKeep works with your connection switched off entirely."
+              }
             },
             {
-              "@type": "ListItem",
-              "position": 3,
-              "name": "FAQ",
-              "item": "https://www.enigmakeep.com/#faq"
+              "@type": "Question",
+              "name": "What happens if I forget my master password?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "When you set up your vault you receive a 12-word recovery phrase. Keep it somewhere safe and offline. If you forget the master password, that phrase restores access. Without either the password or the phrase, the data cannot be recovered — that is the trade-off of true zero-knowledge encryption."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is the opaque vault file?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "When you export your vault, EnigmaKeep writes an opaque binary .dat. There are no magic bytes, PEM banners, or plaintext metadata — a packet capture or hex dump sees random-looking data."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Can I store files, not just passwords?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. You can attach files to entries and they are encrypted inside the vault with the same AES-256-GCM protection as your logins."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How does biometric unlock work?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "EnigmaKeep uses WebAuthn. Your fingerprint or face data stays inside your device secure enclave and is never sent anywhere. The biometric simply authorises the local unlock of your encrypted vault."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Can I import from another password manager?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. Export a CSV from 1Password, LastPass, Bitwarden, or Chrome and import it directly into EnigmaKeep. Your logins are encrypted the moment they land in your vault."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is EnigmaKeep really free and open source?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Completely. There are no paid tiers, no ads, and no data collection. The source is published on GitHub: the app under the AGPL-3.0 licence and the cryptography under the MIT licence."
+              }
             }
           ]
         }

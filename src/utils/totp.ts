@@ -4,8 +4,12 @@ function base32Decode(base32: string): Uint8Array {
 
   let bits = '';
   for (const char of cleanedBase32) {
+    if (char === '=') continue; // padding
     const val = base32Chars.indexOf(char);
-    if (val === -1) continue;
+    if (val === -1) {
+      // Dropping the character would silently derive a different key.
+      throw new Error('Invalid base32 secret');
+    }
     bits += val.toString(2).padStart(5, '0');
   }
 
@@ -107,23 +111,35 @@ export function parseOtpAuthUri(uri: string): {
   try {
     const url = new URL(uri);
     if (url.protocol !== 'otpauth:') return null;
-    if (url.host !== 'totp') return null;
+    if (url.host.toLowerCase() !== 'totp') return null;
 
-    const pathParts = url.pathname.substring(1).split(':');
-    const issuer = pathParts.length > 1 ? pathParts[0] : undefined;
-    const accountName = pathParts.length > 1 ? pathParts[1] : pathParts[0];
+    let label = url.pathname.substring(1);
+    try {
+      label = decodeURIComponent(label);
+    } catch {
+      /* keep the raw label */
+    }
+    const colon = label.indexOf(':');
+    const issuer = colon >= 0 ? label.slice(0, colon).trim() : undefined;
+    const accountName = (colon >= 0 ? label.slice(colon + 1) : label).trim();
 
-    const secret = url.searchParams.get('secret');
-    if (!secret) return null;
+    const secret = (url.searchParams.get('secret') || '').replace(/\s/g, '').toUpperCase();
+    if (!validateSecret(secret)) return null;
 
-    const algorithm = (url.searchParams.get('algorithm') as 'SHA1' | 'SHA256' | 'SHA512') || 'SHA1';
-    const digits = parseInt(url.searchParams.get('digits') || '6');
-    const period = parseInt(url.searchParams.get('period') || '30');
+    // Everything from a scanned/pasted URI is untrusted: unknown algorithms
+    // or absurd digit/period values would make code generation throw later.
+    const rawAlgorithm = (url.searchParams.get('algorithm') || 'SHA1').toUpperCase();
+    const algorithm: 'SHA1' | 'SHA256' | 'SHA512' =
+      rawAlgorithm === 'SHA256' || rawAlgorithm === 'SHA512' ? rawAlgorithm : 'SHA1';
+    const digitsParam = parseInt(url.searchParams.get('digits') || '6', 10);
+    const digits = digitsParam === 7 || digitsParam === 8 ? digitsParam : 6;
+    const periodParam = parseInt(url.searchParams.get('period') || '30', 10);
+    const period = Number.isInteger(periodParam) && periodParam >= 15 && periodParam <= 120 ? periodParam : 30;
 
     return {
       secret,
-      issuer: url.searchParams.get('issuer') || issuer,
-      accountName,
+      issuer: url.searchParams.get('issuer') || issuer || undefined,
+      accountName: accountName || undefined,
       algorithm,
       digits,
       period
@@ -161,8 +177,8 @@ export function generateOtpAuthUri(
 
 export function validateSecret(secret: string): boolean {
   try {
-    const cleaned = secret.replace(/\s/g, '').toUpperCase();
-    if (cleaned.length < 16) return false;
+    const cleaned = secret.replace(/\s/g, '').toUpperCase().replace(/=+$/, '');
+    if (cleaned.length < 16 || cleaned.length > 256) return false;
 
     const base32Chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
     for (const char of cleaned) {

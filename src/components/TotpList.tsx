@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { Copy, Edit2, Trash2, Star, Clock, RefreshCw } from 'lucide-react';
+import { Edit2, Trash2, Star, Copy, ShieldCheck } from 'lucide-react';
 import { TotpEntry } from '../types/vault';
 import { generateTOTP } from '../utils/totp';
+import { Avatar, EmptyState, OverflowMenu } from './ui';
 
 interface TotpListProps {
   entries: TotpEntry[];
@@ -11,6 +12,7 @@ interface TotpListProps {
   onCopy: (code: string, title: string) => void;
   selectedIds?: string[];
   onSelectionChange?: (ids: string[]) => void;
+  emptyAction?: React.ReactNode;
 }
 
 interface TotpCode {
@@ -18,26 +20,50 @@ interface TotpCode {
   timeRemaining: number;
 }
 
-export function TotpList({ entries, onEdit, onDelete, onToggleFavorite, onCopy, selectedIds = [], onSelectionChange }: TotpListProps) {
+/** "123456" -> "123 456", "12345678" -> "1234 5678" */
+function groupCode(code: string): string {
+  const half = Math.ceil(code.length / 2);
+  return `${code.slice(0, half)} ${code.slice(half)}`;
+}
+
+function Countdown({ remaining, period }: { remaining: number; period: number }) {
+  const r = 9;
+  const circumference = 2 * Math.PI * r;
+  const fraction = remaining / period;
+  const tone = fraction > 0.25 ? 'text-accent' : 'text-danger';
+  return (
+    <span className={`relative inline-flex h-7 w-7 items-center justify-center ${tone}`} title={`${remaining}s left`}>
+      <svg viewBox="0 0 24 24" className="absolute inset-0 -rotate-90">
+        <circle cx="12" cy="12" r={r} fill="none" stroke="currentColor" strokeOpacity="0.15" strokeWidth="2.5" />
+        <circle
+          cx="12" cy="12" r={r} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - fraction)}
+          style={{ transition: 'stroke-dashoffset 1s linear' }}
+        />
+      </svg>
+      <span className="text-[9px] font-semibold tabular-nums">{remaining}</span>
+    </span>
+  );
+}
+
+export function TotpList({ entries, onEdit, onDelete, onToggleFavorite, onCopy, selectedIds = [], onSelectionChange, emptyAction }: TotpListProps) {
   const [codes, setCodes] = useState<Record<string, TotpCode>>({});
 
   useEffect(() => {
     const updateCodes = async () => {
       const newCodes: Record<string, TotpCode> = {};
-
       for (const entry of entries) {
         try {
-          const result = await generateTOTP(entry.secret, {
+          newCodes[entry.id] = await generateTOTP(entry.secret, {
             algorithm: entry.algorithm,
             digits: entry.digits,
             period: entry.period
           });
-          newCodes[entry.id] = result;
         } catch (error) {
           console.error(`Error generating TOTP for ${entry.title}:`, error);
         }
       }
-
       setCodes(newCodes);
     };
 
@@ -45,13 +71,6 @@ export function TotpList({ entries, onEdit, onDelete, onToggleFavorite, onCopy, 
     const interval = setInterval(updateCodes, 1000);
     return () => clearInterval(interval);
   }, [entries]);
-
-  const getProgressColor = (timeRemaining: number, period: number = 30) => {
-    const percentage = (timeRemaining / period) * 100;
-    if (percentage > 50) return 'bg-success';
-    if (percentage > 25) return 'bg-accent';
-    return 'bg-danger';
-  };
 
   const sortedEntries = [...entries].sort((a, b) => {
     if (a.favorite && !b.favorite) return -1;
@@ -61,157 +80,104 @@ export function TotpList({ entries, onEdit, onDelete, onToggleFavorite, onCopy, 
 
   const toggleSelection = (id: string) => {
     if (!onSelectionChange) return;
-
-    if (selectedIds.includes(id)) {
-      onSelectionChange(selectedIds.filter(selectedId => selectedId !== id));
-    } else {
-      onSelectionChange([...selectedIds, id]);
-    }
+    onSelectionChange(selectedIds.includes(id) ? selectedIds.filter(s => s !== id) : [...selectedIds, id]);
   };
 
   const toggleSelectAll = () => {
     if (!onSelectionChange) return;
-
-    if (selectedIds.length === entries.length) {
-      onSelectionChange([]);
-    } else {
-      onSelectionChange(entries.map(e => e.id));
-    }
+    onSelectionChange(selectedIds.length === entries.length ? [] : entries.map(e => e.id));
   };
 
   if (entries.length === 0) {
     return (
-      <div className="text-center py-16">
-        <div className="w-24 h-24 bg-surface2 rounded-full flex items-center justify-center mx-auto mb-4">
-          <RefreshCw size={48} className="text-muted" />
-        </div>
-        <h3 className="text-xl font-semibold text-ink mb-2">
-          No 2FA codes yet
-        </h3>
-        <p className="text-muted">
-          Add your first 2FA code to get started
-        </p>
-      </div>
+      <EmptyState
+        icon={<ShieldCheck size={22} strokeWidth={1.7} />}
+        title="No 2FA codes yet"
+        description="Add the setup key from a site's two-factor settings, and EnigmaKeep will generate the codes."
+        action={emptyAction}
+      />
     );
   }
 
   return (
-    <div className="space-y-4">
+    <div className="list-panel">
       {onSelectionChange && (
-        <div className="flex items-center gap-3 p-3 bg-surface2 rounded-lg border border-line">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={selectedIds.length === entries.length && entries.length > 0}
-              onChange={toggleSelectAll}
-              className="w-4 h-4 text-accent rounded focus:ring-2 focus:ring-accent"
-            />
-            <span className="text-sm font-medium text-muted">
-              Select All ({selectedIds.length} selected)
-            </span>
-          </label>
+        <div className="hidden items-center gap-3 bg-surface2/50 px-4 py-2.5 text-xs font-medium text-muted sm:flex">
+          <input
+            type="checkbox"
+            aria-label="Select all"
+            checked={selectedIds.length === entries.length && entries.length > 0}
+            onChange={toggleSelectAll}
+            className="h-4 w-4 rounded border-line text-accent focus:ring-2 focus:ring-focus/30"
+          />
+          <span>{selectedIds.length > 0 ? `${selectedIds.length} selected` : `${entries.length} ${entries.length === 1 ? 'code' : 'codes'}`}</span>
         </div>
       )}
 
-      <div className="space-y-3">
-        {sortedEntries.map((entry) => {
-          const totpCode = codes[entry.id];
-          const period = entry.period || 30;
-          const isSelected = selectedIds.includes(entry.id);
+      {sortedEntries.map((entry) => {
+        const totpCode = codes[entry.id];
+        const period = entry.period || 30;
+        const isSelected = selectedIds.includes(entry.id);
+        const subtitle = entry.accountName || (entry.issuer && entry.issuer !== entry.title ? entry.issuer : '');
 
-          return (
-            <div
-              key={entry.id}
-              className={`bg-surface rounded-xl border ${
-                isSelected ? 'border-accent ring-2 ring-accent/30' : 'border-line'
-              } p-5 hover:shadow-md transition-all`}
-            >
-              <div className="flex items-center gap-4">
-                {onSelectionChange && (
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggleSelection(entry.id)}
-                    className="w-4 h-4 text-accent rounded focus:ring-2 focus:ring-accent flex-shrink-0"
-                  />
-                )}
+        return (
+          <div key={entry.id} className={`list-row ${isSelected ? 'bg-accent/[0.06]' : ''}`}>
+            {onSelectionChange && (
+              <input
+                type="checkbox"
+                aria-label={`Select ${entry.title}`}
+                checked={isSelected}
+                onChange={() => toggleSelection(entry.id)}
+                className="hidden h-4 w-4 shrink-0 rounded border-line text-accent focus:ring-2 focus:ring-focus/30 sm:block"
+              />
+            )}
+            <Avatar name={entry.issuer || entry.title} />
 
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <h3 className="text-base font-semibold text-ink truncate">
-                        {entry.title}
-                      </h3>
-                      {entry.favorite && (
-                        <Star size={14} className="text-accent fill-accent flex-shrink-0" />
-                      )}
-                    </div>
-                    <button
-                      onClick={() => onToggleFavorite(entry.id)}
-                      className="text-muted hover:text-accent transition-colors flex-shrink-0"
-                      title={entry.favorite ? 'Remove from favorites' : 'Add to favorites'}
-                    >
-                      <Star size={18} className={entry.favorite ? 'fill-accent text-accent' : ''} />
-                    </button>
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex-1">
-                      {totpCode ? (
-                        <button
-                          onClick={() => onCopy(totpCode.code, entry.title)}
-                          className="group text-left w-full"
-                        >
-                          <div className="text-3xl font-mono font-bold text-accent tracking-[0.3em] group-hover:text-accent-2 transition-colors">
-                            {totpCode.code}
-                          </div>
-                          <div className="mt-2 h-1 bg-surface2 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full transition-all duration-1000 ease-linear ${getProgressColor(totpCode.timeRemaining, period)}`}
-                              style={{ width: `${(totpCode.timeRemaining / period) * 100}%` }}
-                            />
-                          </div>
-                        </button>
-                      ) : (
-                        <div className="flex items-center justify-center py-4">
-                          <div className="animate-spin text-muted">
-                            <RefreshCw size={20} />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex flex-col items-end gap-2 ml-4 flex-shrink-0">
-                      {totpCode && (
-                        <div className="flex items-center gap-1 text-sm text-muted">
-                          <Clock size={14} />
-                          <span className="font-mono font-semibold">{totpCode.timeRemaining}s</span>
-                        </div>
-                      )}
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => onEdit(entry)}
-                          className="p-1.5 text-muted hover:bg-surface2 hover:text-accent rounded transition-colors"
-                          title="Edit"
-                        >
-                          <Edit2 size={16} />
-                        </button>
-                        <button
-                          onClick={() => onDelete(entry.id)}
-                          className="p-1.5 text-muted hover:bg-danger/10 hover:text-danger rounded transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-1.5">
+                <span className="truncate text-sm font-medium text-ink">{entry.title}</span>
+                {entry.favorite && <Star size={12} className="shrink-0 text-accent" fill="currentColor" aria-label="Favorite" />}
               </div>
+              {subtitle && <div className="truncate text-[13px] text-muted">{subtitle}</div>}
             </div>
-          );
-        })}
-      </div>
+
+            {totpCode ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => onCopy(totpCode.code, entry.title)}
+                  className="rounded-md px-2 py-1 text-base font-semibold tabular-nums tracking-[0.06em] text-ink transition-colors hover:bg-ink/5 sm:text-xl"
+                  title="Copy code"
+                >
+                  {groupCode(totpCode.code)}
+                </button>
+                <Countdown remaining={totpCode.timeRemaining} period={period} />
+              </>
+            ) : (
+              <span className="font-mono text-lg text-muted">--- ---</span>
+            )}
+
+            <div className="flex shrink-0 items-center gap-0.5">
+              <button
+                type="button"
+                onClick={() => totpCode && onCopy(totpCode.code, entry.title)}
+                className="icon-btn hidden sm:inline-flex"
+                title="Copy code"
+                aria-label="Copy code"
+              >
+                <Copy size={16} />
+              </button>
+              <OverflowMenu
+                items={[
+                  { label: entry.favorite ? 'Remove favorite' : 'Add to favorites', icon: <Star size={15} />, onSelect: () => onToggleFavorite(entry.id) },
+                  { label: 'Edit', icon: <Edit2 size={15} />, onSelect: () => onEdit(entry) },
+                  { label: 'Delete', icon: <Trash2 size={15} />, onSelect: () => onDelete(entry.id), danger: true }
+                ]}
+              />
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

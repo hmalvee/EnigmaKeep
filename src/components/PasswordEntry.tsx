@@ -1,11 +1,9 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import {
-  Eye, EyeOff, Copy, Edit2, Trash2, ExternalLink, CopyPlus,
-  Star, Check
-} from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Copy, Edit2, Trash2, ExternalLink, CopyPlus, Star, Check, KeyRound, User } from 'lucide-react';
 import type { PasswordEntry as PasswordEntryType } from '../types/vault';
 import { secureCopy } from '../utils/secureClipboard';
 import { CATEGORY_COLORS } from './CategoryFilter';
+import { Avatar, OverflowMenu } from './ui';
 
 interface Props {
   entry: PasswordEntryType;
@@ -17,12 +15,6 @@ interface Props {
   clipboardTimeout?: number;
 }
 
-function entryInitial(title: string): string {
-  const t = title.trim();
-  if (!t) return '?';
-  return t.charAt(0).toUpperCase();
-}
-
 function displayHost(url?: string): string | null {
   if (!url) return null;
   try {
@@ -32,6 +24,19 @@ function displayHost(url?: string): string | null {
   }
 }
 
+/** Only http(s) URLs are opened; imported entries may carry any scheme. */
+export function openEntryUrl(url?: string): void {
+  if (!url) return;
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return;
+    window.open(parsed.href, '_blank', 'noopener,noreferrer');
+  } catch {
+    /* not a URL */
+  }
+}
+
+/** One login in the passwords list. Clicking the row opens it for editing. */
 export function PasswordEntry({
   entry,
   onEdit,
@@ -41,20 +46,9 @@ export function PasswordEntry({
   onCopyNotification,
   clipboardTimeout = 15000
 }: Props) {
-  const [showPassword, setShowPassword] = useState(false);
   const [copiedField, setCopiedField] = useState<'user' | 'pass' | null>(null);
-  const cardRef = useRef<HTMLElement>(null);
-
   const host = useMemo(() => displayHost(entry.url), [entry.url]);
-  const categoryStyle = entry.category
-    ? (CATEGORY_COLORS[entry.category] || CATEGORY_COLORS['Other'])
-    : null;
-
-  useEffect(() => {
-    if (!showPassword) return;
-    const timer = setTimeout(() => setShowPassword(false), 8000);
-    return () => clearTimeout(timer);
-  }, [showPassword]);
+  const categoryStyle = entry.category ? (CATEGORY_COLORS[entry.category] || CATEGORY_COLORS['Other']) : null;
 
   useEffect(() => {
     if (!copiedField) return;
@@ -62,199 +56,86 @@ export function PasswordEntry({
     return () => clearTimeout(timer);
   }, [copiedField]);
 
-  const onPointerMove = useCallback((e: React.PointerEvent<HTMLElement>) => {
-    const el = cardRef.current;
-    if (!el) return;
-    const rect = el.getBoundingClientRect();
-    el.style.setProperty('--mx', `${e.clientX - rect.left}px`);
-    el.style.setProperty('--my', `${e.clientY - rect.top}px`);
-  }, []);
-
   const copyField = async (text: string, field: 'user' | 'pass', label: string) => {
     if (!text) return;
     try {
       await secureCopy(text, clipboardTimeout);
       setCopiedField(field);
-      if (onCopyNotification) {
-        onCopyNotification(
-          field === 'pass' ? `${label} copied — clears soon` : `${label} copied`,
-          Math.floor(clipboardTimeout / 1000)
-        );
-      }
+      onCopyNotification?.(`${label} copied`, field === 'pass' ? Math.floor(clipboardTimeout / 1000) : 0);
     } catch (error) {
       console.error('Failed to copy:', error);
     }
   };
 
+  const stop = (fn: () => void) => (e: React.MouseEvent) => {
+    e.stopPropagation();
+    fn();
+  };
+
   return (
-    <article
-      ref={cardRef}
-      onPointerMove={onPointerMove}
-      className="vault-entry-card group"
-    >
-      <div className="cipher-mesh" aria-hidden />
+    // The whole row is a mouse target; keyboard users get the title button.
+    <div onClick={() => onEdit(entry)} className="list-row group cursor-pointer focus-within:bg-ink/[0.03]">
+      <Avatar name={entry.title} />
 
-      <div className="flex items-center gap-3 px-4 pt-4 pb-3">
-        <div
-          className="w-10 h-10 rounded-xl bg-accent/15 border border-accent/25 flex items-center justify-center shrink-0 font-display font-bold text-accent text-base transition-transform duration-300 group-hover:scale-105 group-hover:rotate-[-3deg]"
-          aria-hidden
+      <button
+        type="button"
+        onClick={stop(() => onEdit(entry))}
+        className="min-w-0 flex-1 text-left focus:outline-none focus-visible:underline"
+        aria-label={`Open ${entry.title}`}
+      >
+        <span className="flex items-center gap-1.5">
+          <span className="truncate text-sm font-medium text-ink">{entry.title}</span>
+          {entry.favorite && <Star size={12} className="shrink-0 text-accent" fill="currentColor" aria-label="Favorite" />}
+        </span>
+        <span className="block truncate text-[13px] text-muted">
+          {entry.username || host || 'No username'}
+        </span>
+      </button>
+
+      <div className="hidden w-48 min-w-0 truncate text-[13px] text-muted lg:block">
+        {host ?? <span className="opacity-50">No website</span>}
+      </div>
+
+      <div className="hidden w-28 md:block">
+        {entry.category && categoryStyle && (
+          <span className={`inline-block max-w-full truncate rounded border px-1.5 py-0.5 text-[11px] font-medium ${categoryStyle}`}>
+            {entry.category}
+          </span>
+        )}
+      </div>
+
+      <div className="flex shrink-0 items-center gap-0.5">
+        {entry.username && (
+          <button
+            type="button"
+            onClick={stop(() => copyField(entry.username, 'user', 'Username'))}
+            className={`icon-btn hidden sm:inline-flex ${copiedField === 'user' ? '!text-success' : ''}`}
+            title="Copy username"
+            aria-label="Copy username"
+          >
+            {copiedField === 'user' ? <Check size={16} /> : <User size={16} />}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={stop(() => copyField(entry.password, 'pass', 'Password'))}
+          className={`icon-btn ${copiedField === 'pass' ? '!text-success' : ''}`}
+          title="Copy password"
+          aria-label="Copy password"
         >
-          {entryInitial(entry.title)}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <h3 className="font-display font-semibold text-ink text-[15px] leading-tight truncate">
-              {entry.title}
-            </h3>
-            {entry.favorite && (
-              <Star size={13} className="text-accent shrink-0" fill="currentColor" aria-label="Favorite" />
-            )}
-          </div>
-          <div className="flex items-center gap-1.5 mt-0.5 text-xs text-muted min-w-0">
-            {host ? (
-              <a
-                href={entry.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:text-accent truncate inline-flex items-center gap-1"
-                onClick={(e) => e.stopPropagation()}
-              >
-                {host}
-                <ExternalLink size={10} className="opacity-70 shrink-0" />
-              </a>
-            ) : entry.username ? (
-              <span className="truncate">{entry.username}</span>
-            ) : (
-              <span className="opacity-60">No website</span>
-            )}
-            {entry.category && categoryStyle && (
-              <>
-                <span className="opacity-40">·</span>
-                <span className={`px-1.5 py-px rounded text-[10px] font-medium border shrink-0 ${categoryStyle}`}>
-                  {entry.category}
-                </span>
-              </>
-            )}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-0.5 shrink-0">
-          {onToggleFavorite && (
-            <button
-              type="button"
-              onClick={() => onToggleFavorite(entry.id)}
-              className={`p-2 rounded-lg ${
-                entry.favorite ? 'text-accent bg-accent/10' : 'text-muted hover:text-accent hover:bg-surface2'
-              }`}
-              title={entry.favorite ? 'Unfavorite' : 'Favorite'}
-            >
-              <Star size={15} fill={entry.favorite ? 'currentColor' : 'none'} />
-            </button>
-          )}
-          <button
-            type="button"
-            onClick={() => onEdit(entry)}
-            className="p-2 text-muted hover:text-accent hover:bg-surface2 rounded-lg"
-            title="Edit"
-          >
-            <Edit2 size={15} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onDelete(entry.id)}
-            className="p-2 text-muted hover:text-danger hover:bg-surface2 rounded-lg"
-            title="Delete"
-          >
-            <Trash2 size={15} />
-          </button>
-        </div>
+          {copiedField === 'pass' ? <Check size={16} /> : <KeyRound size={16} />}
+        </button>
+        <OverflowMenu
+          items={[
+            ...(entry.username ? [{ label: 'Copy username', icon: <Copy size={15} />, onSelect: () => copyField(entry.username, 'user', 'Username') }] : []),
+            ...(entry.url ? [{ label: 'Open website', icon: <ExternalLink size={15} />, onSelect: () => openEntryUrl(entry.url) }] : []),
+            ...(onToggleFavorite ? [{ label: entry.favorite ? 'Remove favorite' : 'Add to favorites', icon: <Star size={15} />, onSelect: () => onToggleFavorite(entry.id) }] : []),
+            { label: 'Edit', icon: <Edit2 size={15} />, onSelect: () => onEdit(entry) },
+            ...(onDuplicate ? [{ label: 'Duplicate', icon: <CopyPlus size={15} />, onSelect: () => onDuplicate(entry) }] : []),
+            { label: 'Delete', icon: <Trash2 size={15} />, onSelect: () => onDelete(entry.id), danger: true }
+          ]}
+        />
       </div>
-
-      <div className="mx-4 mb-4 rounded-xl border border-line bg-surface2/80 backdrop-blur-sm overflow-hidden divide-y divide-line">
-        <div className="flex items-center gap-3 px-3 py-2.5 min-h-[44px]">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-muted w-14 shrink-0">
-            User
-          </span>
-          <span className="flex-1 text-sm text-ink truncate">
-            {entry.username || <span className="text-muted italic">—</span>}
-          </span>
-          {entry.username && (
-            <button
-              type="button"
-              onClick={() => copyField(entry.username, 'user', 'Username')}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium shrink-0 ${
-                copiedField === 'user'
-                  ? 'bg-success/15 text-success'
-                  : 'bg-surface text-muted hover:text-ink border border-line'
-              }`}
-            >
-              {copiedField === 'user' ? <Check size={13} /> : <Copy size={13} />}
-              {copiedField === 'user' ? 'Copied' : 'Copy'}
-            </button>
-          )}
-        </div>
-
-        <div className="flex items-center gap-3 px-3 py-2.5 min-h-[44px]">
-          <span className="text-[11px] font-medium uppercase tracking-wide text-muted w-14 shrink-0">
-            Pass
-          </span>
-          <span className="flex-1 text-sm font-mono text-ink truncate tracking-wider">
-            {showPassword ? entry.password : '••••••••••••••••'}
-          </span>
-          <div className="flex items-center gap-1 shrink-0">
-            <button
-              type="button"
-              onClick={() => setShowPassword(v => !v)}
-              className="p-1.5 rounded-lg text-muted hover:text-ink hover:bg-surface border border-transparent hover:border-line"
-              title={showPassword ? 'Hide' : 'Show'}
-            >
-              {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
-            </button>
-            <button
-              type="button"
-              onClick={() => copyField(entry.password, 'pass', 'Password')}
-              className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium ${
-                copiedField === 'pass'
-                  ? 'bg-success/15 text-success'
-                  : 'bg-accent text-accent-ink hover:bg-accent-2'
-              }`}
-            >
-              {copiedField === 'pass' ? <Check size={13} /> : <Copy size={13} />}
-              {copiedField === 'pass' ? 'Copied' : 'Copy'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {(entry.notes || (entry.tags && entry.tags.length > 0) || onDuplicate) && (
-        <div className="px-4 pb-3.5 flex items-start justify-between gap-3 border-t border-line/80 pt-2.5">
-          <div className="min-w-0 flex-1">
-            {entry.notes && (
-              <p className="text-xs text-muted line-clamp-2 leading-relaxed">{entry.notes}</p>
-            )}
-            {entry.tags && entry.tags.length > 0 && (
-              <div className="flex flex-wrap gap-1 mt-1.5">
-                {entry.tags.map(tag => (
-                  <span key={tag} className="px-1.5 py-0.5 rounded text-[10px] bg-surface2 text-muted border border-line">
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-          {onDuplicate && (
-            <button
-              type="button"
-              onClick={() => onDuplicate(entry)}
-              className="p-1.5 text-muted hover:text-accent hover:bg-surface2 rounded-lg shrink-0"
-              title="Duplicate"
-            >
-              <CopyPlus size={14} />
-            </button>
-          )}
-        </div>
-      )}
-    </article>
+    </div>
   );
 }

@@ -1,0 +1,293 @@
+/* ═══════════════════════════════════════════════════
+   Landing hero — Vexel hero screen, EnigmaKeep copy.
+   Reference frame 1280×800; every layout number × --u.
+   ═══════════════════════════════════════════════════ */
+
+.vx {
+  --u: min(100vh / 800, max(100vw / 1280, min(100vw / 640, 0.75px)));
+  --vx-ink: #ffffff;
+  --vx-nav: rgba(238, 242, 255, 0.9);
+  --vx-sub: rgba(226, 233, 255, 0.74);
+  --vx-link: rgba(212, 236, 255, 0.77);
+  --vx-hair: rgba(255, 255, 255, 0.19);
+  --vx-btn: #ffffff;
+  --vx-btn-ink: #0a0a0a;
+  --vx-hairline-w: max(calc(284 * var(--u)), 252px);
+
+  position: relative;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  overflow: hidden;
+  background-color: #01061a;
+  background-image: linear-gradient(90deg, #00061a 0%, #01071b 22%, #01071a 45%, #010718 62%, #010614 80%, #020511 100%);
+  color: var(--vx-ink);
+  font-family: 'Google Sans', 'Product Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: geometricPrecision;
+  font-kerning: normal;
+}
+@supports (height: 100dvh) {
+  .vx {
+    --u: min(100dvh / 800, max(100vw / 1280, min(100vw / 640, 0.75px)));
+    height: 100dvh;
+  }
+}
+
+.vx a { text-decoration: none; }
+.vx a:focus { outline: none; }
+
+/* ── Masthead ───────────────────────────────────── */
+.vx .mast {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-top: calc(env(safe-area-inset-top, 0px) + 40.5 * var(--u));
+}
+.vx .wm {
+  display: block;
+  line-height: 0;
+  color: var(--vx-ink);
+  position: relative;
+  left: calc(-0.5 * var(--u));
+}
+.vx .wm svg {
+  display: block;
+  height: max(calc(23.5 * var(--u)), 17px);
+  width: auto;
+}
+.vx .rule {
+  width: var(--vx-hairline-w);
+  height: 1px;
+  margin-top: calc(24 * var(--u));
+  background: var(--vx-hair);
+  transform-origin: 50% 50%;
+}
+.vx .nav {
+  box-sizing: border-box;
+  width: var(--vx-hairline-w);
+  display: flex;
+  justify-content: space-between;
+  margin-top: calc(17.4 * var(--u));
+  padding: 0 calc(8.9 * var(--u));
+}
+.vx .nav a {
+  display: block;
+  font-size: max(calc(15 * var(--u)), 13px);
+  letter-spacing: -0.033em;
+  line-height: 1.2;
+  color: var(--vx-nav);
+  transition: color 0.2s ease;
+}
+.vx .nav a:hover { color: #fff; }
+
+/* ── Copy ───────────────────────────────────────── */
+.vx .gap {
+  flex: 82.98 1 0;
+  min-height: calc(24 * var(--u));
+}
+.vx .copy {
+  position: relative;
+  z-index: 1;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.vx .h {
+  margin: 0;
+  font-weight: 400;
+  font-size: max(calc(68 * var(--u)), 34px);
+  line-height: 0.9559;
+  letter-spacing: -0.0279em;
+  white-space: nowrap;
+}
+.vx .l { display: block; }
+.vx .li { display: block; }
+.vx .l2 {
+  letter-spacing: -0.0294em;
+  transform: translateX(calc(2.6 * var(--u)));
+}
+.vx .sub {
+  margin: calc(18.98 * var(--u)) 0 0;
+  font-size: max(calc(21 * var(--u)), 15px);
+  letter-spacing: -0.005em;
+  color: var(--vx-sub);
+  text-wrap: balance;
+}
+.vx .cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  width: max(calc(216 * var(--u)), 196px);
+  height: max(calc(46 * var(--u)), 44px);
+  margin-top: calc(25.64 * var(--u));
+  border-radius: max(calc(4.5 * var(--u)), 4px);
+  background: var(--vx-btn);
+  color: var(--vx-btn-ink);
+  font-weight: 500;
+  font-size: max(calc(17 * var(--u)), 15px);
+  letter-spacing: -0.0265em;
+  transition: background-color 0.2s ease, box-shadow 0.25s ease;
+}
+.vx .cta:hover {
+  background: #e8eef7;
+  box-shadow: 0 0 0 calc(4 * var(--u)) rgba(120, 200, 255, 0.12);
+}
+.vx .disc {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36em;
+  margin-top: calc(20.55 * var(--u));
+  font-size: max(calc(14.8 * var(--u)), 13px);
+  letter-spacing: -0.051em;
+  color: var(--vx-link);
+}
+.vx .ar { display: inline-flex; }
+.vx .ar svg {
+  width: 0.68em;
+  height: 0.85em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.45;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+}
+.vx .disc:hover .ar svg { transform: translateY(0.12em); }
+
+/* ── Focus ──────────────────────────────────────── */
+.vx .wm:focus-visible,
+.vx .nav a:focus-visible,
+.vx .disc:focus-visible {
+  outline: 2px solid #7fd4ff;
+  outline-offset: 4px;
+}
+.vx .cta:focus-visible {
+  outline: 2px solid #7fd4ff;
+  outline-offset: 3px;
+}
+
+/* ── Background video ───────────────────────────── */
+.vx .field {
+  position: relative;
+  z-index: 0;
+  flex: 318.68 1 0;
+  min-height: calc(160 * var(--u));
+  width: 100%;
+  container-type: size;
+}
+.vx .vid {
+  position: absolute;
+  left: 50%;
+  top: calc(-36.4 * var(--u));
+  width: auto;
+  max-width: none; /* undo Tailwind preflight's video { max-width: 100% } */
+  height: max(60vw, 105vh);
+  aspect-ratio: auto 1619 / 971;
+  transform: translate(-50%, -50.463%);
+  pointer-events: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0%, #000 4%);
+  mask-image: linear-gradient(to bottom, transparent 0%, #000 4%);
+}
+@supports (height: 1cqh) {
+  .vx .vid {
+    height: max(calc(100cqw * 971 / 1619), calc((100cqh + 36.4 * var(--u)) / 0.49537 + 1px));
+  }
+}
+
+/* ── Tablet ─────────────────────────────────────── */
+@media (min-width: 600px) and (max-width: 1099.98px) and (min-height: 541px) {
+  .vx { --u: min(100vh / 800, 1px, max(100vw / 1280, 100vh / 1190, 0.86px)); }
+  @supports (height: 100dvh) {
+    .vx { --u: min(100dvh / 800, 1px, max(100vw / 1280, 100dvh / 1190, 0.86px)); }
+  }
+  .vx .field { max-height: 48%; }
+  .vx .nav a { padding: 14px 8px; margin: -14px -8px; }
+  .vx .disc { padding: 12px 10px; margin: calc(20.55 * var(--u) - 12px) -10px -12px; }
+}
+
+/* ── Portrait phones ────────────────────────────── */
+@media (max-width: 599.98px) and (orientation: portrait) {
+  .vx {
+    --u: min(100vh / 800, max(100vw / 1280, min(100vw / 640, 0.75px)));
+    --vx-hairline-w: min(max(calc(284 * var(--u)), 252px), calc(100vw - 32px));
+    padding-left: 24px;
+    padding-right: 24px;
+    box-sizing: border-box;
+  }
+  @supports (height: 100svh) {
+    .vx { --u: min(100svh / 800, max(100vw / 1280, min(100vw / 640, 0.75px))); }
+  }
+  .vx .h {
+    white-space: nowrap;
+    font-size: max(26px, min(calc(68 * var(--u)), calc((100vw - 48px) / 8.235)));
+  }
+  .vx .sub {
+    font-size: max(16px, min(calc(21 * var(--u)), 3.345vw));
+    line-height: 1.25;
+    overflow-wrap: break-word;
+  }
+  .vx .field {
+    max-height: 48%;
+    width: 100vw;
+  }
+  .vx .nav a { padding: 14px 8px; margin: -14px -8px; }
+  .vx .disc { padding: 12px 10px; margin: calc(20.55 * var(--u) - 12px) -10px -12px; }
+}
+
+/* ── Short landscape ────────────────────────────── */
+@media (orientation: landscape) and (max-height: 539.98px) {
+  .vx { --vx-hairline-w: max(calc(284 * var(--u)), 210px); }
+  .vx .wm svg { height: max(calc(23.5 * var(--u)), 13px); }
+  .vx .nav a { font-size: max(calc(15 * var(--u)), 11px); }
+  .vx .h { font-size: max(calc(68 * var(--u)), 28px); }
+  .vx .sub { font-size: max(calc(21 * var(--u)), 12px); }
+  .vx .cta {
+    width: max(calc(216 * var(--u)), 150px);
+    height: max(calc(46 * var(--u)), 34px);
+    font-size: max(calc(17 * var(--u)), 12.5px);
+  }
+  .vx .disc { font-size: max(calc(14.8 * var(--u)), 11px); }
+  .vx .gap { min-height: calc(14 * var(--u)); }
+  .vx .field { min-height: calc(120 * var(--u)); }
+}
+@media (orientation: landscape) and (max-height: 539.98px) and (pointer: coarse) {
+  .vx .nav a { padding: 14px 8px; margin: -14px -8px; }
+  .vx .disc { padding: 12px 10px; margin: calc(20.55 * var(--u) - 12px) -10px -12px; }
+}
+
+/* ── Very narrow, not portrait ──────────────────── */
+@media (max-width: 359px) and (orientation: landscape) {
+  .vx .h {
+    white-space: normal;
+    font-size: 30px;
+  }
+}
+
+/* ── Entrance ───────────────────────────────────── */
+html.intro .vx .wm,
+html.intro .vx .nav a,
+html.intro .vx .sub,
+html.intro .vx .cta,
+html.intro .vx .disc {
+  opacity: 0;
+}
+html.intro .vx .rule { transform: scaleX(0); }
+html.intro .vx .l { clip-path: inset(-0.35em -0.2em 0 -0.2em); }
+html.intro .vx .li { transform: translateY(104%); }
+
+@media (prefers-reduced-motion: reduce) {
+  .vx *,
+  .vx *::before,
+  .vx *::after {
+    transition: none !important;
+  }
+}

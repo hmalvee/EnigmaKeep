@@ -1,4 +1,6 @@
-import { KeyRound, FileText, ShieldCheck, FolderLock, Settings, X } from 'lucide-react';
+import { KeyRound, FileText, ShieldCheck, FolderLock, Settings, X, Lock } from 'lucide-react';
+import { Wordmark } from './Wordmark';
+import { ThemeToggle } from './ThemeToggle';
 
 type View = 'passwords' | 'notes' | 'totp' | 'files' | 'settings';
 
@@ -9,6 +11,9 @@ interface SidebarProps {
   noteCount: number;
   totpCount: number;
   fileCount: number;
+  /** Vault file name shown in the footer. */
+  vaultName?: string;
+  onLock?: () => void;
   isOpen?: boolean;
   onClose?: () => void;
 }
@@ -20,6 +25,8 @@ export function Sidebar({
   noteCount,
   totpCount,
   fileCount,
+  vaultName,
+  onLock,
   isOpen = true,
   onClose
 }: SidebarProps) {
@@ -39,7 +46,7 @@ export function Sidebar({
     <>
       {isOpen && onClose && (
         <div
-          className="fixed inset-0 bg-ink/40 backdrop-blur-[2px] z-40 md:hidden animate-fadeIn"
+          className="fixed inset-0 bg-black/50 backdrop-blur-[2px] z-40 md:hidden animate-fadeIn"
           onClick={onClose}
         />
       )}
@@ -47,32 +54,25 @@ export function Sidebar({
       <aside
         className={`
           fixed md:static inset-y-0 left-0 z-50
-          w-64 bg-surface/95 backdrop-blur-xl border-r border-line flex flex-col
+          w-64 bg-bg/95 md:bg-bg/40 backdrop-blur-xl border-r border-line flex flex-col
           transform transition-transform duration-300 ease-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}
         `}
       >
-        <div className="p-5 border-b border-line">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-accent flex items-center justify-center shadow-[0_8px_20px_-10px_rgb(var(--accent)/0.7)] animate-soft-glow">
-                <KeyRound className="text-accent-ink" size={20} />
-              </div>
-              <div>
-                <h2 className="font-display font-semibold text-ink leading-none">EnigmaKeep</h2>
-                <p className="text-[11px] text-muted mt-1 tracking-wide">Vault unlocked</p>
-              </div>
-            </div>
+        <div className="px-5 pt-6 pb-4">
+          <div className="flex items-center justify-between h-6">
+            <Wordmark className="h-[14px] w-auto text-ink" />
             {onClose && (
-              <button onClick={onClose} className="md:hidden text-muted hover:text-ink">
+              <button onClick={onClose} className="md:hidden text-muted hover:text-ink" aria-label="Close menu">
                 <X size={22} />
               </button>
             )}
           </div>
         </div>
 
-        <nav className="flex-1 p-3 overflow-y-auto flex flex-col">
-          <ul className="space-y-1">
+        <nav className="flex-1 px-3 pb-3 overflow-y-auto flex flex-col">
+          <p className="px-3 pt-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted/70">Vault</p>
+          <ul className="space-y-0.5">
             {menuItems.map((item) => {
               const Icon = item.icon;
               const isActive = currentView === item.id;
@@ -83,12 +83,12 @@ export function Sidebar({
                     className={`nav-item ${isActive ? 'nav-item-active' : ''}`}
                   >
                     <span className="flex items-center gap-3">
-                      <Icon size={18} className={isActive ? 'scale-105' : ''} />
-                      <span className="font-medium text-sm">{item.label}</span>
+                      <Icon size={18} strokeWidth={1.7} />
+                      <span className="text-[15px]">{item.label}</span>
                     </span>
                     <span
-                      className={`text-xs font-semibold px-2 py-0.5 rounded-md tabular-nums ${
-                        isActive ? 'bg-accent/15 text-accent' : 'bg-surface2 text-muted'
+                      className={`text-xs px-1.5 py-0.5 rounded tabular-nums ${
+                        isActive ? 'text-accent' : 'text-muted/80'
                       }`}
                     >
                       {item.count}
@@ -99,16 +99,33 @@ export function Sidebar({
             })}
           </ul>
 
-          <div className="mt-auto pt-3 border-t border-line">
+          <div className="mt-auto space-y-3 pt-3">
+            <div className="flex items-center justify-between px-3 sm:hidden">
+              <span className="text-[13px] text-muted">Theme</span>
+              <ThemeToggle />
+            </div>
             <button
               onClick={() => handleViewChange('settings')}
               className={`nav-item ${currentView === 'settings' ? 'nav-item-active' : ''}`}
             >
               <span className="flex items-center gap-3">
-                <Settings size={18} />
-                <span className="font-medium text-sm">Settings</span>
+                <Settings size={18} strokeWidth={1.7} />
+                <span className="text-[15px]">Settings</span>
               </span>
             </button>
+
+            <div className="flex items-center gap-3 rounded-lg border border-line bg-surface/60 px-3 py-2.5">
+              <span className="w-2 h-2 shrink-0 rounded-full bg-success shadow-[0_0_8px_rgb(var(--success)/0.7)]" aria-hidden />
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] font-medium text-ink leading-tight">Unlocked</p>
+                <p className="truncate text-[11px] text-muted leading-tight" title={vaultName}>{vaultName || 'Vault file not linked'}</p>
+              </div>
+              {onLock && (
+                <button onClick={onLock} className="icon-btn" title="Lock vault" aria-label="Lock vault">
+                  <Lock size={15} />
+                </button>
+              )}
+            </div>
           </div>
         </nav>
       </aside>

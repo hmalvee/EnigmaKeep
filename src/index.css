@@ -1,54 +1,86 @@
-@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 /* ═══════════════════════════════════════════════════
-   ENIGMAKEEP — "Graphite & Brass" design system
-   A crafted, editorial dark theme. Warm brass accent,
-   graphite surfaces, restrained motion.
+   ENIGMAKEEP — "Vexel navy" design system
+   Night-sky navy, Google Sans, white primary actions,
+   hairline rules and a cool #7fd4ff focus accent.
    ═══════════════════════════════════════════════════ */
 
+@font-face {
+  font-family: 'Google Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: block;
+  src: url('/assets/google-sans-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Google Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: block;
+  src: url('/assets/google-sans-500.woff2') format('woff2');
+}
+
 @layer base {
-  /* Light theme (default when .dark is absent) */
+  /* Light theme (default when .dark is absent) — "daylight" companion */
   :root {
     color-scheme: light;
 
-    --bg: 246 244 240;
-    --bg-deep: 236 233 227;
+    --bg: 244 246 251;
+    --bg-deep: 233 237 246;
     --surface: 255 255 255;
-    --surface-2: 242 239 234;
-    --line: 220 214 204;
-    --ink: 28 26 23;
-    --muted: 110 104 94;
-    --accent: 180 120 40;      /* deeper brass for light contrast */
-    --accent-2: 168 98 42;
-    --accent-ink: 255 250 242;
-    --danger: 196 72 64;
-    --success: 34 140 78;
-    --slate: 100 112 130;
-    --shadow: 28 26 23;
+    --surface-2: 238 242 249;
+    --line: 216 223 237;
+    --ink: 1 6 26;
+    --muted: 84 95 125;
+    --accent: 14 108 190;
+    --accent-2: 9 86 158;
+    --accent-ink: 255 255 255;
+    --danger: 198 48 62;
+    --success: 18 132 88;
+    --warn: 160 96 10;
+    --slate: 88 102 140;
+    --shadow: 1 6 26;
+    --btn: 1 6 26;
+    --btn-ink: 255 255 255;
+    --btn-hover: 22 32 66;
+    --focus: 14 108 190;
+    --hair: rgb(1 6 26 / 0.14);
+    --sky: linear-gradient(180deg, #f7f9fd 0%, #eef2fa 100%);
+    --horizon: radial-gradient(120% 70% at 50% 120%, rgb(14 108 190 / 0.12), transparent 62%);
   }
 
-  /* Dark theme */
+  /* Dark theme — the Vexel night sky */
   .dark {
     color-scheme: dark;
 
-    --bg: 14 16 19;
-    --bg-deep: 10 12 14;
-    --surface: 23 26 31;
-    --surface-2: 30 34 41;
-    --line: 44 49 58;
-    --ink: 237 239 242;
-    --muted: 156 165 177;
-    --accent: 217 164 76;
-    --accent-2: 198 135 68;
-    --accent-ink: 26 18 4;
-    --danger: 230 106 98;
-    --success: 94 186 128;
-    --slate: 127 140 163;
-    --shadow: 0 0 0;
+    --bg: 1 6 26;
+    --bg-deep: 0 4 17;
+    --surface: 6 13 36;
+    --surface-2: 11 20 47;
+    --line: 36 42 64;
+    --ink: 255 255 255;
+    --muted: 167 174 195;
+    --accent: 127 212 255;
+    --accent-2: 170 226 255;
+    --accent-ink: 1 6 26;
+    --danger: 255 128 128;
+    --success: 108 220 170;
+    --warn: 255 199 115;
+    --slate: 150 164 205;
+    --shadow: 0 2 10;
+    --btn: 255 255 255;
+    --btn-ink: 10 10 10;
+    --btn-hover: 232 238 247;
+    --focus: 127 212 255;
+    --hair: rgb(255 255 255 / 0.19);
+    --sky: linear-gradient(90deg, #00061a 0%, #01071b 22%, #01071a 45%, #010718 62%, #010614 80%, #020511 100%);
+    --horizon:
+      radial-gradient(150% 46% at 50% 118%, transparent 69%, rgb(127 212 255 / 0.22) 70.5%, rgb(60 140 230 / 0.07) 73%, transparent 79%),
+      radial-gradient(150% 46% at 50% 118%, rgb(40 110 210 / 0.10), transparent 70%),
+      radial-gradient(120% 70% at 50% 122%, rgb(120 200 255 / 0.12), rgb(60 110 200 / 0.04) 38%, transparent 64%);
   }
 
   html {
@@ -60,19 +92,26 @@
     overscroll-behavior-y: none;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    text-rendering: geometricPrecision;
+    font-kerning: normal;
+    font-synthesis-weight: none;
+    font-family: 'Google Sans', 'Product Sans', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
     @apply bg-bg text-ink;
+    background-image: var(--sky);
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
   h1, h2, h3, h4, .font-display {
-    font-family: 'Space Grotesk', system-ui, sans-serif;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.02em;
   }
 
   input, textarea, button, select {
     font-size: 16px;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: inherit;
+  }
+
+  ::selection {
+    background: rgb(var(--focus) / 0.28);
   }
 }
 
@@ -81,24 +120,52 @@
    ═══════════════════════════════════════════════════ */
 
 @layer components {
+  /* Night-sky backdrop with a soft horizon glow (no network assets) */
+  .vx-sky {
+    background-color: rgb(var(--bg));
+    background-image: var(--horizon), var(--sky);
+  }
+
+  .hairline {
+    height: 1px;
+    background: var(--hair);
+  }
+
+  /* Headline line that rises out of its own baseline mask */
+  .mask-line {
+    display: block;
+    overflow: hidden;
+    padding-bottom: 0.1em;
+    margin-bottom: -0.1em;
+  }
+  .mask-line > span {
+    display: block;
+    animation: lineRise 1.1s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
   .glass-card,
   .surface-card {
     @apply bg-surface border border-line rounded-2xl;
     box-shadow:
-      0 1px 2px rgb(var(--shadow) / 0.06),
-      0 8px 24px -12px rgb(var(--shadow) / 0.12);
+      0 1px 2px rgb(var(--shadow) / 0.05),
+      0 12px 32px -18px rgb(var(--shadow) / 0.18);
   }
 
   .dark .glass-card,
   .dark .surface-card {
-    box-shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 10px 30px -20px rgb(0 0 0 / 0.6);
+    background: rgb(var(--surface) / 0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 0.04),
+      0 24px 60px -30px rgb(0 0 0 / 0.8);
   }
 
   .glass-card-hover {
     @apply glass-card transition-all duration-300;
   }
   .glass-card-hover:hover {
-    @apply border-accent/40 -translate-y-0.5;
+    border-color: rgb(var(--focus) / 0.35);
   }
 
   .glass-surface {
@@ -107,7 +174,6 @@
     -webkit-backdrop-filter: blur(12px);
   }
 
-  /* Brass accent text — solid, not a rainbow gradient */
   .neon-text,
   .accent-text {
     @apply text-accent;
@@ -120,40 +186,78 @@
     @apply border border-accent/30 rounded-xl;
   }
 
-  /* Primary brass button */
+  /* Primary action — white on navy (navy on daylight) */
   .btn-primary,
   .ai-button-primary {
-    @apply relative inline-flex items-center justify-center px-6 py-3 rounded-xl font-semibold transition-all duration-200;
-    background: rgb(var(--accent));
-    color: rgb(var(--accent-ink));
+    @apply relative inline-flex items-center justify-center px-6 py-3 rounded-md font-medium;
+    background: rgb(var(--btn));
+    color: rgb(var(--btn-ink));
+    letter-spacing: -0.015em;
   }
   .btn-primary:hover,
   .ai-button-primary:hover {
-    background: rgb(var(--accent-2));
-    transform: translateY(-1px);
-    box-shadow: 0 10px 26px -12px rgb(var(--accent) / 0.55);
+    background: rgb(var(--btn-hover));
+    box-shadow: 0 0 0 4px rgb(var(--focus) / 0.12);
+  }
+  .btn-primary:disabled,
+  .ai-button-primary:disabled {
+    opacity: 0.4;
+    box-shadow: none;
+    cursor: not-allowed;
   }
 
-  /* Secondary / ghost button */
+  /* Secondary — hairline outline */
   .btn-ghost,
   .ai-button-secondary {
-    @apply inline-flex items-center justify-center px-6 py-3 rounded-xl font-medium text-ink transition-all duration-200;
-    @apply bg-surface2 border border-line;
+    @apply inline-flex items-center justify-center px-6 py-3 rounded-md font-medium text-ink;
+    background: transparent;
+    border: 1px solid var(--hair);
+    letter-spacing: -0.015em;
   }
   .btn-ghost:hover,
   .ai-button-secondary:hover {
-    @apply border-accent/40 -translate-y-0.5;
+    background: rgb(var(--ink) / 0.05);
+    border-color: rgb(var(--ink) / 0.32);
+  }
+  .btn-ghost:disabled,
+  .ai-button-secondary:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
   }
 
   .ai-input,
   .input-field {
-    @apply w-full px-4 py-3 rounded-xl text-ink placeholder-muted/70 transition-all duration-200;
-    @apply bg-surface2 border border-line;
+    @apply w-full px-4 py-3 rounded-lg text-ink placeholder-muted/70;
+    @apply bg-surface2/70 border border-line;
   }
   .ai-input:focus,
   .input-field:focus {
-    @apply border-accent/60 outline-none;
-    box-shadow: 0 0 0 3px rgb(var(--accent) / 0.12);
+    border-color: rgb(var(--focus) / 0.7);
+    outline: none;
+    box-shadow: 0 0 0 3px rgb(var(--focus) / 0.15);
+  }
+
+  /* Square, quiet icon button for row actions */
+  .icon-btn {
+    @apply inline-flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors;
+  }
+  .icon-btn:hover {
+    @apply bg-ink/5 text-ink;
+  }
+  .icon-btn:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgb(var(--focus) / 0.4);
+  }
+
+  /* Bordered list container; rows separated by hairlines */
+  .list-panel {
+    @apply rounded-xl border border-line bg-surface overflow-hidden divide-y divide-line;
+  }
+  .list-row {
+    @apply flex items-center gap-3 px-4 py-3 transition-colors;
+  }
+  .list-row:hover {
+    @apply bg-ink/[0.03];
   }
 
   .ai-badge {
@@ -161,29 +265,34 @@
     @apply bg-accent/10 text-accent border border-accent/20;
   }
 
-  /* Vault entry card — Evervault-inspired hover, CSS-only (fast) */
+  /* Vault entry card — hairline card with a cool hover glow */
   .vault-entry-card {
     @apply relative bg-surface border border-line rounded-2xl overflow-hidden;
     box-shadow:
       0 1px 2px rgb(var(--shadow) / 0.05),
-      0 10px 28px -18px rgb(var(--shadow) / 0.14);
+      0 10px 28px -18px rgb(var(--shadow) / 0.16);
     transition:
       transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
       border-color 0.25s ease,
       box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1);
     will-change: transform;
   }
+  .dark .vault-entry-card {
+    background: rgb(var(--surface) / 0.78);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035), 0 18px 40px -28px rgb(0 0 0 / 0.9);
+  }
   .vault-entry-card:hover {
-    transform: translateY(-3px);
-    border-color: rgb(var(--accent) / 0.4);
+    transform: translateY(-2px);
+    border-color: rgb(var(--focus) / 0.35);
     box-shadow:
       0 1px 2px rgb(var(--shadow) / 0.06),
-      0 18px 40px -20px rgb(var(--accent) / 0.28);
+      0 18px 40px -22px rgb(var(--focus) / 0.3);
   }
   .dark .vault-entry-card:hover {
     box-shadow:
-      0 1px 2px rgb(0 0 0 / 0.4),
-      0 20px 48px -18px rgb(var(--accent) / 0.25);
+      inset 0 1px 0 rgb(255 255 255 / 0.05),
+      0 0 0 4px rgb(120 200 255 / 0.06),
+      0 22px 50px -24px rgb(120 200 255 / 0.22);
   }
   .vault-entry-card .cipher-mesh {
     pointer-events: none;
@@ -192,8 +301,8 @@
     opacity: 0;
     transition: opacity 0.4s ease;
     background:
-      radial-gradient(420px circle at var(--mx, 50%) var(--my, 0%), rgb(var(--accent) / 0.14), transparent 55%),
-      linear-gradient(135deg, rgb(var(--accent) / 0.06), transparent 50%);
+      radial-gradient(420px circle at var(--mx, 50%) var(--my, 0%), rgb(var(--focus) / 0.12), transparent 55%),
+      linear-gradient(180deg, rgb(var(--focus) / 0.04), transparent 45%);
     z-index: 0;
   }
   .vault-entry-card:hover .cipher-mesh {
@@ -206,7 +315,7 @@
 
   /* Staggered grid children */
   .vault-stagger > * {
-    animation: entryRise 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: entryRise 0.55s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   .vault-stagger > *:nth-child(1) { animation-delay: 0.02s; }
   .vault-stagger > *:nth-child(2) { animation-delay: 0.05s; }
@@ -221,29 +330,35 @@
 
   /* Sidebar nav item with sliding accent bar */
   .nav-item {
-    @apply relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-xl border border-transparent text-muted;
-    transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease;
+    @apply relative w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg border border-transparent text-muted;
+    letter-spacing: -0.01em;
+    transition: color 0.2s ease, background-color 0.2s ease, border-color 0.2s ease;
   }
   .nav-item:hover {
-    @apply text-ink bg-surface2;
-    transform: translateX(2px);
+    @apply text-ink;
+    background: rgb(var(--ink) / 0.05);
   }
   .nav-item-active {
-    @apply bg-accent/10 text-accent border-accent/20;
+    @apply text-ink;
+    background: rgb(var(--ink) / 0.06);
+    border-color: var(--hair);
   }
   .nav-item-active:hover {
-    @apply bg-accent/15 text-accent;
-    transform: none;
+    background: rgb(var(--ink) / 0.08);
+  }
+  .nav-item-active svg {
+    color: rgb(var(--accent));
   }
   .nav-item-active::before {
     content: '';
     position: absolute;
-    left: 0;
-    top: 20%;
-    bottom: 20%;
-    width: 3px;
+    left: -1px;
+    top: 22%;
+    bottom: 22%;
+    width: 2px;
     border-radius: 999px;
-    background: rgb(var(--accent));
+    background: rgb(var(--focus));
+    box-shadow: 0 0 10px rgb(var(--focus) / 0.6);
     animation: navBarIn 0.28s cubic-bezier(0.22, 1, 0.36, 1);
   }
 
@@ -257,7 +372,7 @@
 }
 
 /* ═══════════════════════════════════════════════════
-   SUBTLE TEXTURE (no neon grid / scan lines)
+   SUBTLE TEXTURE
    ═══════════════════════════════════════════════════ */
 
 .ai-grid-bg {
@@ -278,26 +393,26 @@
 
 .section-divider {
   height: 1px;
-  @apply bg-line;
+  background: var(--hair);
 }
 .section-divider-glow {
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgb(var(--accent) / 0.4), transparent);
+  background: linear-gradient(90deg, transparent, rgb(var(--focus) / 0.45), transparent);
 }
 
 /* ═══════════════════════════════════════════════════
    SCROLL-REVEAL
    ═══════════════════════════════════════════════════ */
 
-.scroll-reveal { opacity: 0; transform: translateY(28px); transition: all 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+.scroll-reveal { opacity: 0; transform: translateY(28px); transition: all 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
 .scroll-reveal.revealed { opacity: 1; transform: translateY(0); }
-.scroll-reveal-left { opacity: 0; transform: translateX(-40px); transition: all 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+.scroll-reveal-left { opacity: 0; transform: translateX(-40px); transition: all 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
 .scroll-reveal-left.revealed { opacity: 1; transform: translateX(0); }
-.scroll-reveal-right { opacity: 0; transform: translateX(40px); transition: all 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+.scroll-reveal-right { opacity: 0; transform: translateX(40px); transition: all 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
 .scroll-reveal-right.revealed { opacity: 1; transform: translateX(0); }
-.scroll-reveal-3d { opacity: 0; transform: translateY(32px); transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
+.scroll-reveal-3d { opacity: 0; transform: translateY(32px); transition: all 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
 .scroll-reveal-3d.revealed { opacity: 1; transform: translateY(0); }
-.scroll-scale { opacity: 0; transform: scale(0.94); transition: all 0.7s cubic-bezier(0.16, 1, 0.3, 1); }
+.scroll-scale { opacity: 0; transform: scale(0.975); transition: all 0.9s cubic-bezier(0.16, 1, 0.3, 1); }
 .scroll-scale.revealed { opacity: 1; transform: scale(1); }
 
 .stagger-1 { transition-delay: 0.05s; }
@@ -310,7 +425,6 @@
 .stagger-8 { transition-delay: 0.4s; }
 .stagger-9 { transition-delay: 0.45s; }
 
-/* Card tilt disabled — reads as generic AI template */
 .card-3d { transition: transform 0.4s cubic-bezier(0.23, 1, 0.32, 1); }
 .card-3d:hover { transform: translateY(-4px); }
 .parallax-layer-back, .parallax-layer-mid, .parallax-layer-front { transform: none; }
@@ -322,15 +436,15 @@
 @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes slideIn { from { opacity: 0; transform: translateX(-16px); } to { opacity: 1; transform: translateX(0); } }
 @keyframes slideInRight { from { opacity: 0; transform: translateX(16px); } to { opacity: 1; transform: translateX(0); } }
-@keyframes scaleIn { from { opacity: 0; transform: scale(0.97); } to { opacity: 1; transform: scale(1); } }
+@keyframes scaleIn { from { opacity: 0; transform: translateY(10px) scale(0.985); } to { opacity: 1; transform: none; } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 @keyframes bounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 @keyframes rotate { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes slideUp { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes gradientShift { 0% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } 100% { background-position: 0% 50%; } }
 @keyframes entryRise {
-  from { opacity: 0; transform: translateY(14px) scale(0.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 @keyframes navBarIn {
   from { transform: scaleY(0.4); opacity: 0; }
@@ -341,22 +455,24 @@
   50% { transform: translate(18px, -22px) scale(1.06); }
 }
 @keyframes softGlow {
-  0%, 100% { box-shadow: 0 0 0 1px rgb(var(--accent) / 0.18); }
-  50% { box-shadow: 0 0 0 1px rgb(var(--accent) / 0.35), 0 12px 36px -14px rgb(var(--accent) / 0.35); }
+  0%, 100% { box-shadow: 0 0 0 1px rgb(var(--focus) / 0.18); }
+  50% { box-shadow: 0 0 0 1px rgb(var(--focus) / 0.32), 0 0 0 5px rgb(var(--focus) / 0.08); }
 }
+@keyframes ruleIn { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+@keyframes lineRise { from { transform: translateY(104%); } to { transform: none; } }
 
-.animate-fadeIn { animation: fadeIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
-.animate-slideIn { animation: slideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
-.animate-slideInRight { animation: slideInRight 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
-.animate-slideUp { animation: slideUp 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
-.animate-scaleIn { animation: scaleIn 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
+.animate-fadeIn { animation: fadeIn 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+.animate-slideIn { animation: slideIn 0.4s cubic-bezier(0.22, 1, 0.36, 1); }
+.animate-slideInRight { animation: slideInRight 0.4s cubic-bezier(0.22, 1, 0.36, 1); }
+.animate-slideUp { animation: slideUp 0.5s cubic-bezier(0.22, 1, 0.36, 1); }
+.animate-scaleIn { animation: scaleIn 0.6s cubic-bezier(0.16, 1, 0.3, 1); }
 .animate-pulse-soft { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
 .animate-bounce { animation: bounce 1.4s ease-in-out infinite; }
 .animate-rotate { animation: rotate 2s linear infinite; }
 .animate-orb-float { animation: orbDrift 12s ease-in-out infinite; }
 .animate-soft-glow { animation: softGlow 3.2s ease-in-out infinite; }
+.animate-rule-in { animation: ruleIn 1s cubic-bezier(0.7, 0, 0.2, 1) 0.15s both; }
 
-/* Prefer transform/opacity — avoid transition:all on interactive elements */
 button, a {
   transition:
     color 0.18s ease,
@@ -373,16 +489,22 @@ input, textarea, select {
 ::-webkit-scrollbar { width: 10px; height: 10px; }
 ::-webkit-scrollbar-track { background: rgb(var(--bg-deep)); }
 ::-webkit-scrollbar-thumb { background: rgb(var(--line)); border-radius: 999px; border: 2px solid rgb(var(--bg-deep)); }
-::-webkit-scrollbar-thumb:hover { background: rgb(var(--accent) / 0.5); }
+::-webkit-scrollbar-thumb:hover { background: rgb(var(--focus) / 0.5); }
 * { scrollbar-width: thin; scrollbar-color: rgb(var(--line)) rgb(var(--bg-deep)); }
 
-*:focus-visible {
-  @apply outline-none ring-2 ring-offset-2;
-  --tw-ring-color: rgb(var(--accent) / 0.55);
-  --tw-ring-offset-color: rgb(var(--bg));
+:focus { outline: none; }
+:focus-visible {
+  outline: 2px solid rgb(var(--focus));
+  outline-offset: 3px;
+}
+/* Text fields show focus with a border + soft ring instead of an outline */
+:where(input:not([type='checkbox']):not([type='radio']):not([type='range']), textarea, select):focus-visible {
+  outline: none;
+  border-color: rgb(var(--focus) / 0.7);
+  box-shadow: 0 0 0 3px rgb(var(--focus) / 0.15);
 }
 
-.glow-cyan, .glow-blue { box-shadow: 0 0 0 1px rgb(var(--accent) / 0.18); }
+.glow-cyan, .glow-blue { box-shadow: 0 0 0 1px rgb(var(--focus) / 0.18); }
 .glow-purple { box-shadow: 0 0 0 1px rgb(var(--slate) / 0.18); }
 .text-glow-cyan, .text-glow-blue { text-shadow: none; }
 
@@ -400,3 +522,5 @@ input, textarea, select {
   .vault-entry-card:hover { transform: none !important; }
   .vault-stagger > * { animation: none !important; opacity: 1 !important; }
 }
+
+@keyframes loadSweep { from { transform: translateX(-100%); } to { transform: translateX(300%); } }

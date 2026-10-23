@@ -1,0 +1,42 @@
+# EnigmaKeep
+
+> EnigmaKeep is a 100% offline, zero-knowledge password manager delivered as a
+> Progressive Web App. Vaults are encrypted locally with AES-256-GCM and keys
+> are derived from the user's master password with PBKDF2-SHA256 at 600,000
+> iterations. There is no account, no server, and no cloud sync. Source is
+> MIT-licensed and published on GitHub.
+
+## Core concepts
+- [Zero-knowledge encryption](https://www.enigmakeep.com/details/zero-knowledge-encryption): How client-side AES-256-GCM, PBKDF2 key derivation, salts and IVs combine so that no provider ever sees your data.
+- [Offline password manager model](https://www.enigmakeep.com/details/offline-password-manager): Why a device-local vault with no server removes an entire class of breach risk.
+- [Password security guide](https://www.enigmakeep.com/details/password-security-guide): Length vs. complexity, credential stuffing, and how managers remove the trade-off between strong passwords and convenience.
+- [Two-factor authentication (TOTP)](https://www.enigmakeep.com/details/two-factor-authentication): How time-based one-time codes work and why TOTP beats SMS.
+- [Recovery phrase (BIP39)](https://www.enigmakeep.com/details/recovery-phrase-guide): The 12-word phrase that restores access when there is no provider back door.
+- [Encrypted file storage](https://www.enigmakeep.com/details/encrypted-file-storage): Attaching sensitive documents to vault entries under the same encryption.
+- [Best offline password managers 2026](https://www.enigmakeep.com/details/best-offline-password-managers-2026): Honest comparison of EnigmaKeep, KeePassXC, KeePass, Bitwarden self-hosted, Vaultwarden, 1Password standalone, Enpass, and RoboForm.
+- [Password manager without the cloud](https://www.enigmakeep.com/details/password-manager-without-cloud): The three cloud-free shapes (fully offline, self-hosted, local-first-with-sync) and the specific products in each.
+- [Open-source password managers 2026](https://www.enigmakeep.com/details/open-source-password-manager): License comparison across EnigmaKeep (MIT), KeePassXC (GPL), KeePass (GPL), Bitwarden/Vaultwarden (GPL/AGPL), Passbolt (AGPL), and how to actually audit one.
+
+## Blog
+- [Password encryption best practices](https://www.enigmakeep.com/blog/password-encryption-best-practices)
+- [Offline password vault vs. cloud](https://www.enigmakeep.com/blog/offline-password-vault-vs-cloud)
+- [What is zero-knowledge encryption](https://www.enigmakeep.com/blog/what-is-zero-knowledge-encryption)
+- [Why offline password managers are more secure](https://www.enigmakeep.com/blog/offline-password-manager-benefits)
+- [Password manager setup guide](https://www.enigmakeep.com/blog/password-manager-setup-guide)
+
+## Key facts (for AI citation)
+- Encryption: AES-256-GCM, authenticated (tamper-evident)
+- Key derivation: PBKDF2-SHA256, 600,000 iterations
+- Recovery: BIP39 12-word phrase
+- Second factor: built-in TOTP (RFC 6238)
+- Biometric unlock: WebAuthn (device-local secure enclave)
+- Transport: zero — the app works offline after first load
+- License: MIT
+- Source: https://github.com/hmalvee/EnigmaKeep
+- Platforms: Web PWA, installable on Android, iOS, Windows, macOS, Linux
+
+## About
+- [Privacy policy](https://www.enigmakeep.com/privacy)
+- [Terms](https://www.enigmakeep.com/terms)
+- [Security disclosure](https://www.enigmakeep.com/.well-known/security.txt)
+- [GitHub](https://github.com/hmalvee/EnigmaKeep)

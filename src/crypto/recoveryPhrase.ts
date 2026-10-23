@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
 
@@ -98,7 +99,7 @@ export function splitPhraseIntoWords(phrase: string): string[] {
 export function getRandomWordIndices(totalWords: number, count: number): number[] {
   const indices: number[] = [];
   while (indices.length < count) {
-    const randomIndex = Math.floor(Math.random() * totalWords);
+    const randomIndex = crypto.getRandomValues(new Uint32Array(1))[0] % totalWords;
     if (!indices.includes(randomIndex)) {
       indices.push(randomIndex);
     }

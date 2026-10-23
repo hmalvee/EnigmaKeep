@@ -1,33 +1,26 @@
-import { useEffect } from 'react';
-import { Shield, ArrowLeft, ArrowRight, Clock } from 'lucide-react';
+import { useEffect, useMemo, useRef, type CSSProperties } from 'react';
+import { ArrowLeft, ArrowRight, Clock } from 'lucide-react';
 import { Link } from '../components/Link';
 import { detailArticles, getDetailArticle } from '../data/detailsContent';
+import { PageShell } from '../site/SiteChrome';
+import { spotlight, useScrollSpy } from '../site/motion';
+import { slugify } from '../site/text';
+import { CtaBand, NotFound, PageHero, ReadingProgress, Toc } from '../site/content';
 
 interface DetailArticleProps {
   slug: string;
 }
 
-function ArticleNav() {
-  return (
-    <nav className="border-b border-line">
-      <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 font-display font-semibold text-ink hover:text-accent transition-colors"
-        >
-          <Shield size={22} className="text-accent" />
-          <span>EnigmaKeep</span>
-        </Link>
-        <Link href="/app" className="btn-primary text-sm">
-          Open Vault
-        </Link>
-      </div>
-    </nav>
-  );
-}
-
 export function DetailArticle({ slug }: DetailArticleProps) {
   const article = getDetailArticle(slug);
+  const articleRef = useRef<HTMLElement>(null);
+
+  const toc = useMemo(
+    () => (article ? article.sections.map((s) => ({ id: slugify(s.heading), label: s.heading })) : []),
+    [article]
+  );
+  const tocIds = useMemo(() => toc.map((t) => t.id), [toc]);
+  const active = useScrollSpy(tocIds, '-96px 0px -70% 0px');
 
   useEffect(() => {
     if (article) {
@@ -39,124 +32,118 @@ export function DetailArticle({ slug }: DetailArticleProps) {
 
   if (!article) {
     return (
-      <div className="min-h-screen bg-bg text-ink">
-        <ArticleNav />
-        <main className="max-w-3xl mx-auto px-4 py-24 text-center">
-          <h1 className="text-3xl font-bold mb-4">Guide not found</h1>
-          <p className="text-muted mb-8">
-            We couldn&apos;t find the guide you were looking for.
-          </p>
-          <Link href="/details" className="btn-primary">
-            <ArrowLeft size={18} className="mr-2" />
-            Back to all guides
-          </Link>
-        </main>
-      </div>
+      <PageShell active="guides">
+        <NotFound
+          title="Guide not found"
+          body="We couldn't find the guide you were looking for."
+          href="/details"
+          label="Back to all guides"
+        />
+      </PageShell>
     );
   }
 
-  const related = detailArticles.filter((a) => a.slug !== article.slug);
+  const position = detailArticles.findIndex((a) => a.slug === article.slug);
+  // The next three guides in order, wrapping around.
+  const related = [1, 2, 3]
+    .map((offset) => detailArticles[(position + offset) % detailArticles.length])
+    .filter((a) => a.slug !== article.slug);
+  const [firstPara, ...introRest] = article.intro.split('\n\n');
 
   return (
-    <div className="min-h-screen bg-bg text-ink">
-      <ArticleNav />
+    <PageShell key={article.slug} active="guides">
+      <ReadingProgress targetRef={articleRef} />
 
-      <main className="max-w-3xl mx-auto px-4 py-12">
-        <Link
-          href="/details"
-          className="inline-flex items-center gap-2 text-muted hover:text-accent transition-colors text-sm mb-8"
-        >
-          <ArrowLeft size={16} />
-          <span>All guides</span>
-        </Link>
-
-        <article>
-          <header className="mb-10">
-            <h1 className="text-4xl font-bold mb-4 leading-tight">{article.title}</h1>
-            <p className="text-muted text-lg leading-relaxed mb-5">
-              {article.description}
-            </p>
-            <span className="ai-badge">
-              <Clock size={14} />
-              {article.readingTime}
+      <PageHero
+        top={
+          <nav data-rv className="pg-crumbs rv" aria-label="Breadcrumb">
+            <Link href="/details">Guides</Link>
+            <i />
+            <span>Guide {String(position + 1).padStart(2, '0')}</span>
+          </nav>
+        }
+        lines={[article.title]}
+        article
+        lead={article.description}
+        meta={
+          <>
+            <span>
+              <Clock size={14} /> {article.readingTime}
             </span>
-          </header>
+            <span>{article.sections.length} sections</span>
+          </>
+        }
+      />
 
-          <div className="space-y-5 mb-12">
-            {article.intro.split('\n\n').map((para, i) => (
-              <p key={i} className="text-muted leading-relaxed text-lg">
-                {para}
-              </p>
+      <div className="lp-wrap">
+        <div className="pg-rule" />
+        <div className="doc is-right">
+          <Toc
+            items={toc}
+            active={active}
+            footer={
+              <Link href="/details" className="lp-link">
+                <ArrowLeft size={14} /> All guides
+              </Link>
+            }
+          />
+
+          <article ref={articleRef} className="prose-lux">
+            <p className="lede dropcap">{firstPara}</p>
+            {introRest.map((para, i) => (
+              <p key={i}>{para}</p>
             ))}
-          </div>
 
-          {article.sections.map((section) => (
-            <section key={section.heading} className="mb-10">
-              <h2 className="text-2xl font-semibold mb-4">{section.heading}</h2>
-              <div className="space-y-4">
+            {article.sections.map((section) => (
+              <section key={section.heading}>
+                <h2 id={slugify(section.heading)}>{section.heading}</h2>
                 {section.body.map((para, i) => (
-                  <p key={i} className="text-muted leading-relaxed">
-                    {para}
-                  </p>
+                  <p key={i}>{para}</p>
                 ))}
-              </div>
-            </section>
-          ))}
-        </article>
-
-        <div className="section-divider my-12" />
-
-        <section className="mb-12">
-          <h2 className="text-xl font-semibold mb-5">Related guides</h2>
-          <ul className="space-y-3">
-            {related.map((a) => (
-              <li key={a.slug}>
-                <Link
-                  href={'/details/' + a.slug}
-                  className="surface-card px-5 py-4 flex items-center justify-between gap-4 hover:border-accent/40 transition-colors group"
-                >
-                  <span className="font-medium group-hover:text-accent transition-colors">
-                    {a.title}
-                  </span>
-                  <ArrowRight
-                    size={16}
-                    className="text-accent shrink-0 group-hover:translate-x-0.5 transition-transform"
-                  />
-                </Link>
-              </li>
+              </section>
             ))}
-          </ul>
-        </section>
-
-        <section className="surface-card p-8 text-center bg-accent/5">
-          <h2 className="text-2xl font-semibold mb-3">Ready to secure your passwords?</h2>
-          <p className="text-muted leading-relaxed mb-6 max-w-xl mx-auto">
-            EnigmaKeep keeps everything encrypted on your device, with no account and
-            no servers. Open your vault and take control of your credentials.
-          </p>
-          <Link href="/app" className="btn-primary">
-            Open Vault
-            <ArrowRight size={18} className="ml-2" />
-          </Link>
-        </section>
-      </main>
-
-      <footer className="border-t border-line mt-8">
-        <div className="max-w-3xl mx-auto px-4 py-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-muted">
-          <Link href="/" className="hover:text-accent transition-colors">
-            Home
-          </Link>
-          <Link href="/details" className="hover:text-accent transition-colors">
-            All guides
-          </Link>
-          <Link href="/privacy" className="hover:text-accent transition-colors">
-            Privacy Policy
-          </Link>
-          <Link href="/terms" className="hover:text-accent transition-colors">
-            Terms
-          </Link>
+          </article>
         </div>
-      </footer>
-    </div>
+
+        {related.length > 0 && (
+          <section className="related" aria-labelledby="related-title">
+            <div className="related-head">
+              <h2 id="related-title">Related guides</h2>
+              <Link href="/details" className="lp-link">
+                All guides <ArrowRight size={15} />
+              </Link>
+            </div>
+            <ol className="guide-list">
+              {related.map((a, i) => (
+                <li key={a.slug}>
+                  <Link
+                    href={'/details/' + a.slug}
+                    className="guide-row card-in"
+                    style={{ '--i': i } as CSSProperties}
+                    onPointerMove={spotlight}
+                  >
+                    <span className="guide-n">
+                      {String(detailArticles.indexOf(a) + 1).padStart(2, '0')}
+                    </span>
+                    <div>
+                      <h2>{a.title}</h2>
+                      <p>{a.description}</p>
+                    </div>
+                    <span className="guide-go">
+                      <Clock size={14} />
+                      {a.readingTime}
+                      <ArrowRight size={16} />
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ol>
+          </section>
+        )}
+
+        <div className="pg-gap" />
+        <CtaBand />
+      </div>
+    </PageShell>
   );
 }

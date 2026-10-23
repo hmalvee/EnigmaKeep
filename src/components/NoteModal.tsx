@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { X, Save, Star, Tag as TagIcon } from 'lucide-react';
 import { Note } from '../types/vault';
 

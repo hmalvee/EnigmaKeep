@@ -1,20 +1,33 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
-import { Lock, Plus, Search, Upload, Download, AlertTriangle, Menu } from 'lucide-react';
+import { Lock, Plus, Search, Upload, Download, AlertTriangle, Menu, KeyRound } from 'lucide-react';
 import { verifyCrypto } from './crypto/encryption';
 import {
   createNewVault,
   encryptVault,
-  loadVaultFromFile,
+  encryptVaultWithLayout,
+  defaultLayout,
+  openVaultFile,
   saveVaultToFile,
+  stampSave,
+  prepareForSave,
+  createDecoyVault,
+  removeDecoyVault,
+  changeDuressPassword,
   addEntry,
   updateEntry,
   deleteEntry,
   searchEntries,
   updateVaultMetadata,
   getVaultMetadata,
-  decryptVaultWithRecovery,
-  readVaultRecoverySection
+  withRecoveryKey
 } from './utils/vaultManager';
+import { getSessionLayout, setSessionLayout, clearSessionLayout, type FileLayout } from './utils/sessionFile';
+import { checkVaultVersion, recordVaultVersion, type VersionCheck } from './utils/vaultVersions';
+import { clearVaultSnapshots, saveVaultSnapshot } from './utils/vaultSnapshots';
+import { rotatePuzzle } from './crypto/socialRecovery';
+import { validateSecret } from './utils/totp';
+import { parseSecretKey, normalizeSecretKey, rememberSecretKey, getDeviceSecretKeys } from './crypto/secretKey';
+import type { SocialRecoveryConfig } from './crypto/socialRecovery';
 import type { VaultData, PasswordEntry as PasswordEntryType, VaultSettings as VaultSettingsType, Note, TotpEntry } from './types/vault';
 import { PasswordEntry } from './components/PasswordEntry';
 import { EntryModal } from './components/EntryModal';
@@ -23,6 +36,7 @@ import { VaultSettings } from './components/VaultSettings';
 import { ImportModal } from './components/ImportModal';
 import { ThemeToggle } from './components/ThemeToggle';
 import { Toast } from './components/Toast';
+import { StatusToast, EmptyState } from './components/ui';
 import { InstallPrompt } from './components/InstallPrompt';
 import { LoginScreen } from './components/LoginScreen';
 import { CreateVaultFlow } from './components/CreateVaultFlow';
@@ -48,17 +62,17 @@ import { TotpExportModal } from './components/TotpExportModal';
 import { useAutoLock } from './hooks/useAutoLock';
 import { deriveKeyFromRecoveryPhrase } from './crypto/recoveryPhrase';
 import { saveLastVaultPath, getLastVaultPath, saveLastVaultHandle, getLastVaultHandle, verifyHandleAccess } from './utils/vaultStorage';
-import { isBiometricEnabled, updateBiometricVaultData, decryptBiometricPassword } from './utils/biometric';
+import { isBiometricEnabled, enableBiometric, disableBiometric, clearLegacyBiometricData } from './utils/biometric';
 import {
   setSessionPassword,
   getSessionPassword,
   setSessionRecoveryPhrase,
-  getSessionRecoveryPhrase,
   clearSessionSecrets
 } from './utils/sessionSecrets';
 import { secureCopy, clearSecureClipboard } from './utils/secureClipboard';
 import { waitForUnlockBackoff, recordUnlockFailure, clearUnlockFailures } from './utils/unlockBackoff';
 import { LoadingScreen } from './components/LoadingScreen';
+import { VaultShell } from './components/VaultShell';
 
 const LandingPage = lazy(() => import('./pages/LandingPage').then(module => ({ default: module.LandingPage })));
 const PrivacyPolicy = lazy(() => import('./pages/PrivacyPolicy').then(module => ({ default: module.PrivacyPolicy })));
@@ -66,7 +80,17 @@ const TermsOfService = lazy(() => import('./pages/TermsOfService').then(module =
 const Blog = lazy(() => import('./pages/Blog').then(module => ({ default: module.Blog })));
 const BlogPost = lazy(() => import('./pages/BlogPost').then(module => ({ default: module.BlogPost })));
 const Details = lazy(() => import('./pages/Details').then(module => ({ default: module.Details })));
+const Bench = lazy(() => import('./pages/Bench').then(module => ({ default: module.Bench })));
 const DetailArticle = lazy(() => import('./pages/DetailArticle').then(module => ({ default: module.DetailArticle })));
+
+const DEFAULT_SETTINGS: VaultSettingsType = {
+  idleTimeout: 5 * 60 * 1000,
+  clipboardTimeout: 15 * 1000,
+  lockOnTabClose: true,
+  autoLockOnMinimize: false,
+  clearClipboardOnLock: true,
+  allowScreenshots: false
+};
 
 function App() {
   const [currentPath, setCurrentPath] = useState(window.location.pathname);
@@ -145,6 +169,15 @@ function App() {
   }
 
   // Individual SEO guide article
+  // Public device benchmark for the research dataset.
+  if (currentPath === '/bench' || currentPath === '/bench/') {
+    return (
+      <Suspense fallback={<LoadingScreen />}>
+        <Bench />
+      </Suspense>
+    );
+  }
+
   if (currentPath.startsWith('/details/')) {
     const slug = currentPath.replace('/details/', '').replace('.html', '').replace(/\/$/, '');
     return (
@@ -168,8 +201,11 @@ function App() {
   }
 
   // If we get here, render the vault app
-  console.log('Rendering Vault App for path:', currentPath);
+  return <VaultApp />;
+}
 
+/** The vault itself. Kept as its own component so its hooks never run after App's route early-returns. */
+function VaultApp() {
   const [cryptoReady, setCryptoReady] = useState(false);
   const [isLocked, setIsLocked] = useState(true);
   const [vault, setVault] = useState<VaultData | null>(null);
@@ -181,14 +217,7 @@ function App() {
   const [editingEntry, setEditingEntry] = useState<PasswordEntryType | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
-  const [vaultSettings, setVaultSettings] = useState<VaultSettingsType>({
-    idleTimeout: 5 * 60 * 1000,
-    clipboardTimeout: 15 * 1000,
-    lockOnTabClose: true,
-    autoLockOnMinimize: false,
-    clearClipboardOnLock: true,
-    allowScreenshots: false
-  });
+  const [vaultSettings, setVaultSettings] = useState<VaultSettingsType>(DEFAULT_SETTINGS);
   const [existingRecoveryData, setExistingRecoveryData] = useState<any>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -206,6 +235,11 @@ function App() {
   const [selectedTotpIds, setSelectedTotpIds] = useState<string[]>([]);
   const [showTotpExportModal, setShowTotpExportModal] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  // Download mode (no writable file handle): edits live in memory and a local
+  // snapshot until the user downloads a fresh copy.
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  // An unlock that is waiting for the user to accept a rollback warning.
+  const [pendingUnlock, setPendingUnlock] = useState<{ check: VersionCheck; vault: VaultData; proceed: () => Promise<void> } | null>(null);
 
   useEffect(() => {
     verifyCrypto().then(ready => {
@@ -218,20 +252,8 @@ function App() {
     const savedPath = getLastVaultPath();
     setLastVaultPath(savedPath);
 
-    // Purge legacy biometric vault blob cache if present.
-    try {
-      localStorage.removeItem('vault_file_data');
-    } catch {
-      /* ignore */
-    }
-
-    // Handle navigation
-    const handlePopState = () => {
-      setCurrentPath(window.location.pathname);
-    };
-
-    window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    // Old biometric data could be unwrapped without any biometric check — purge it.
+    clearLegacyBiometricData();
   }, []);
 
   const handleLock = () => {
@@ -239,6 +261,9 @@ function App() {
       void clearSecureClipboard();
     }
     clearSessionSecrets();
+    clearSessionLayout();
+    setPendingUnlock(null);
+    setCurrentView('passwords');
     setVault(null);
     setExistingRecoveryData(null);
     setSearchQuery('');
@@ -248,6 +273,10 @@ function App() {
     setShowModal(false);
     setShowNoteModal(false);
     setShowTotpModal(false);
+    setHasUnsavedChanges(false);
+    // Don't let one vault's settings or file leak into the next one opened.
+    setVaultSettings(DEFAULT_SETTINGS);
+    setFileHandle(null);
     setIsLocked(true);
     setMode('welcome');
   };
@@ -258,17 +287,23 @@ function App() {
   });
 
   useEffect(() => {
-    if (vaultSettings.lockOnTabClose) {
-      const handleBeforeUnload = () => {
-        clearSessionSecrets();
-        if (vaultSettings.clearClipboardOnLock) {
-          void clearSecureClipboard();
+    if (vaultSettings.lockOnTabClose || hasUnsavedChanges) {
+      const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+        if (hasUnsavedChanges) {
+          e.preventDefault();
+          e.returnValue = '';
+        }
+        if (vaultSettings.lockOnTabClose) {
+          clearSessionSecrets();
+          if (vaultSettings.clearClipboardOnLock) {
+            void clearSecureClipboard();
+          }
         }
       };
       window.addEventListener('beforeunload', handleBeforeUnload);
       return () => window.removeEventListener('beforeunload', handleBeforeUnload);
     }
-  }, [vaultSettings.lockOnTabClose, vaultSettings.clearClipboardOnLock]);
+  }, [vaultSettings.lockOnTabClose, vaultSettings.clearClipboardOnLock, hasUnsavedChanges]);
 
   useEffect(() => {
     if (!vaultSettings.allowScreenshots && !isLocked && vault) {
@@ -295,59 +330,90 @@ function App() {
     }
   }, [vaultSettings.allowScreenshots, isLocked, vault]);
 
-  const DEFAULT_SETTINGS: VaultSettingsType = {
-    idleTimeout: 5 * 60 * 1000,
-    clipboardTimeout: 15 * 1000,
-    lockOnTabClose: true,
-    autoLockOnMinimize: false,
-    clearClipboardOnLock: true,
-    allowScreenshots: false
-  };
-
   const applyVaultSettings = (loaded: VaultData) => {
-    if (loaded.settings) {
-      setVaultSettings({ ...DEFAULT_SETTINGS, ...loaded.settings });
-    }
+    setVaultSettings({ ...DEFAULT_SETTINGS, ...(loaded.settings || {}) });
   };
 
-  const handleCreateVaultComplete = async (password: string, recoveryPhraseHash: string, handle: FileSystemFileHandle, phrase: string) => {
+  const downloadBlob = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    // Attach before clicking and revoke later: some browsers abort a download
+    // whose URL is revoked synchronously.
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
+
+  /**
+   * Stamp the save, write to the open file when the browser allows it or
+   * (Firefox, Safari) download a copy, and remember the version on this
+   * device. Returns the vault as written, which callers adopt as state.
+   */
+  const writeVault = async (handle: FileSystemFileHandle | null, data: VaultData, password: string): Promise<VaultData> => {
+    const stamped = stampSave(await prepareForSave(data));
+    if (handle) {
+      const written = await saveVaultToFile(handle, stamped, password);
+      await recordVaultVersion(written);
+      return written;
+    }
+    const encrypted = await encryptVaultWithLayout(stamped, password, getSessionLayout() ?? defaultLayout());
+    setSessionLayout(encrypted.layout);
+    // Keep an encrypted local copy too: the app cannot tell whether the
+    // download actually completed.
+    await saveVaultSnapshot(lastVaultPath || 'vault.dat', await encrypted.blob.arrayBuffer());
+    downloadBlob(encrypted.blob, `notes-${Date.now()}.dat`);
+    setHasUnsavedChanges(false);
+    await recordVaultVersion(stamped);
+    return stamped;
+  };
+
+  const handleCreateVaultComplete = async (
+    password: string,
+    recoveryPhraseHash: string,
+    handle: FileSystemFileHandle | null,
+    phrase: string,
+    secretKey: string
+  ) => {
     try {
-      const newVault = await createNewVault(recoveryPhraseHash);
-      newVault.settings = { ...vaultSettings };
-      await saveVaultToFile(handle, newVault, password, phrase, undefined);
+      const newVault = await withRecoveryKey(
+        { ...(await createNewVault(recoveryPhraseHash)), settings: { ...vaultSettings }, secretKey },
+        phrase
+      );
+      clearSessionLayout();
+      const written = await writeVault(handle, newVault, password);
+      rememberSecretKey(secretKey);
 
       setSessionPassword(password);
       // Phrase only needed while rewriting recovery; drop after first save.
       setSessionRecoveryPhrase(null);
-      setVault(newVault);
+      setVault(written);
       setFileHandle(handle);
       setExistingRecoveryData(null);
       setIsLocked(false);
       setMode('vault');
       clearUnlockFailures();
 
-      saveLastVaultPath(handle.name);
-      setLastVaultPath(handle.name);
-      await saveLastVaultHandle(handle);
-
-      setSuccess('Vault created successfully');
-      setTimeout(() => setSuccess(''), 3000);
+      if (handle) {
+        saveLastVaultPath(handle.name);
+        setLastVaultPath(handle.name);
+        await saveLastVaultHandle(handle);
+        setSuccess('Vault created successfully');
+      } else {
+        setSuccess('Vault created and downloaded. Click Save after changes to download an updated copy.');
+      }
+      setTimeout(() => setSuccess(''), handle ? 3000 : 6000);
     } catch (err) {
-      setError('Failed to create vault');
-      setTimeout(() => setError(''), 3000);
+      console.error('Vault creation failed:', err);
+      throw err;
     }
   };
 
-  const handleBiometricLoginSuccess = async () => {
+  const handleBiometricLoginSuccess = async (password: string) => {
     try {
       await waitForUnlockBackoff();
-      const password = await decryptBiometricPassword();
-      if (!password) {
-        setError('No saved credentials found. Please login with master password to re-enable biometric.');
-        setTimeout(() => setError(''), 3000);
-        return;
-      }
-
       const handle = await getLastVaultHandle();
       if (!handle) {
         setError('Vault file not linked. Open with your master password once to re-enable biometric unlock.');
@@ -375,49 +441,68 @@ function App() {
     }
   };
 
-  const saveBiometricVaultData = async (password: string) => {
-    try {
-      await updateBiometricVaultData(password);
-    } catch (err) {
-      console.error('Failed to save biometric vault data:', err);
-    }
-  };
-
-  const handleLoginWithPassword = async (password: string, file: File, handle: FileSystemFileHandle | null) => {
+  const handleLoginWithPassword = async (
+    password: string,
+    file: File,
+    handle: FileSystemFileHandle | null,
+    secretKeyInput?: string
+  ) => {
     try {
       await waitForUnlockBackoff();
-      const loadedVault = await loadVaultFromFile(file, password);
-
-      const recoverySection = await readVaultRecoverySection(file);
-      if (recoverySection) {
-        setExistingRecoveryData(recoverySection);
+      const candidates = await getDeviceSecretKeys();
+      if (secretKeyInput) {
+        const entered = await parseSecretKey(secretKeyInput);
+        if (!entered) {
+          setError("That Secret Key isn't valid. Check it for typos, or scan the QR code.");
+          setTimeout(() => setError(''), 4000);
+          throw new Error('Invalid Secret Key format');
+        }
+        candidates.unshift(entered);
       }
+      // Tries the visible vault, then a hidden one behind the same password.
+      const opened = await openVaultFile(file, { kind: 'password', password, secretKeys: candidates });
+      const finish = async () => {
+        const loadedVault = opened.vault;
+        if (loadedVault.secretKey) {
+          // Remember it so this device only needs the password from now on.
+          rememberSecretKey(loadedVault.secretKey);
+        }
+        setSessionLayout(opened.layout);
+        setExistingRecoveryData(opened.container?.recovery ?? null);
 
-      setSessionPassword(password);
-      setSessionRecoveryPhrase(null);
-      setVault(loadedVault);
-      applyVaultSettings(loadedVault);
-      setFileHandle(handle);
-      setIsLocked(false);
-      setMode('vault');
-      clearUnlockFailures();
+        setSessionPassword(password);
+        setSessionRecoveryPhrase(null);
+        setVault(loadedVault);
+        applyVaultSettings(loadedVault);
+        setFileHandle(handle);
+        setIsLocked(false);
+        setMode('vault');
+        clearUnlockFailures();
 
-      saveLastVaultPath(file.name);
-      setLastVaultPath(file.name);
-      if (handle) {
-        await saveLastVaultHandle(handle);
+        saveLastVaultPath(file.name);
+        setLastVaultPath(file.name);
+        if (handle) {
+          await saveLastVaultHandle(handle);
+        }
+        await recordVaultVersion(loadedVault);
+
+        setSuccess('Vault unlocked successfully');
+        setTimeout(() => setSuccess(''), 3000);
+      };
+
+      // Rollback check: is this file older than one this device already opened?
+      const check = await checkVaultVersion(opened.vault);
+      if (check.status !== 'ok' && check.record) {
+        setPendingUnlock({ check, vault: opened.vault, proceed: finish });
+        return;
       }
-
-      if (isBiometricEnabled()) {
-        await saveBiometricVaultData(password);
-      }
-
-      setSuccess('Vault unlocked successfully');
-      setTimeout(() => setSuccess(''), 3000);
+      await finish();
     } catch (err: any) {
       recordUnlockFailure();
-      if (err.message?.includes('password') || err.message?.includes('Decryption')) {
-        setError('Incorrect password');
+      if (err.message?.includes('Invalid Secret Key')) {
+        // Message already shown.
+      } else if (err.message?.includes('password') || err.message?.includes('Decryption')) {
+        setError('Incorrect password or Secret Key');
       } else {
         setError('Failed to load vault');
       }
@@ -434,9 +519,6 @@ function App() {
   ) => {
     try {
       await waitForUnlockBackoff();
-      if (!handle) {
-        throw new Error('A writable vault file is required to complete recovery');
-      }
       const phraseHash = await deriveKeyFromRecoveryPhrase(seedPhrase);
       const metadata = await getVaultMetadata(file);
 
@@ -446,18 +528,27 @@ function App() {
         }
       }
 
-      const loadedVault = await decryptVaultWithRecovery(file, seedPhrase);
+      const opened = await openVaultFile(file, { kind: 'phrase', phrase: seedPhrase });
+      const decryptedVault = opened.vault;
 
-      if (loadedVault.recoveryPhraseHash && loadedVault.recoveryPhraseHash !== phraseHash) {
+      if (decryptedVault.recoveryPhraseHash && decryptedVault.recoveryPhraseHash !== phraseHash) {
         throw new Error('Recovery phrase does not match');
       }
 
-      // Re-encrypt recovery block under derived key + new master password.
-      await saveVaultToFile(handle, loadedVault, newPassword, seedPhrase, undefined);
+      // Re-encrypt under the new master password; the stored recovery key keeps
+      // the recovery block current on later saves.
+      const loadedVault = await withRecoveryKey(decryptedVault, seedPhrase);
+      if (loadedVault.secretKey) {
+        rememberSecretKey(loadedVault.secretKey);
+      }
+      // Keep the file's layout: a hidden vault stays hidden behind its decoy.
+      setSessionLayout(opened.layout);
+      await clearVaultSnapshots();
+      const written = await writeVault(handle, loadedVault, newPassword);
 
       setSessionPassword(newPassword);
       setSessionRecoveryPhrase(null);
-      setVault(loadedVault);
+      setVault(written);
       applyVaultSettings(loadedVault);
       setFileHandle(handle);
       setExistingRecoveryData(null);
@@ -472,11 +563,14 @@ function App() {
       }
 
       if (isBiometricEnabled()) {
-        await saveBiometricVaultData(newPassword);
+        // The wrapped password is now wrong; it must be re-enrolled.
+        await disableBiometric();
       }
 
-      setSuccess('Vault recovered and password reset successfully');
-      setTimeout(() => setSuccess(''), 3000);
+      setSuccess(handle
+        ? 'Vault recovered and password reset successfully'
+        : 'Password reset. The updated vault was downloaded; use that file from now on.');
+      setTimeout(() => setSuccess(''), handle ? 3000 : 6000);
     } catch (err: any) {
       recordUnlockFailure();
       if (err.message?.includes('does not match')) {
@@ -493,58 +587,49 @@ function App() {
     }
   };
 
-  const updateBiometricDataAfterSave = async () => {
-    const password = getSessionPassword();
-    if (!isBiometricEnabled() || !password) {
-      return;
-    }
-
-    try {
-      await updateBiometricVaultData(password);
-    } catch (err) {
-      console.error('Failed to update biometric data:', err);
-    }
-  };
-
   const handleSaveVault = async () => {
     const masterPassword = getSessionPassword();
     if (!vault || !masterPassword) return;
 
     try {
-      if (fileHandle) {
-        await saveVaultToFile(fileHandle, vault, masterPassword, getSessionRecoveryPhrase() || undefined, existingRecoveryData);
-        setVault(prev => prev ? { ...prev, lastBackup: Date.now() } : null);
-      } else {
-        const updatedVault = { ...vault, lastBackup: Date.now() };
-        const blob = await encryptVault(updatedVault, masterPassword);
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `notes-${Date.now()}.dat`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setVault(updatedVault);
-      }
+      const written = await writeVault(fileHandle, { ...vault, lastBackup: Date.now() }, masterPassword);
+      setVault(written);
       setSuccess('Vault saved successfully');
       setTimeout(() => setSuccess(''), 3000);
     } catch (err) {
       setError('Failed to save vault');
+      setTimeout(() => setError(''), 4000);
     }
   };
 
+  /**
+   * Write first, then update the screen, so what the user sees is never ahead
+   * of what is on disk. Without a file handle the change is kept in memory
+   * plus an encrypted local snapshot until the user downloads a copy.
+   */
   const persistVault = async (updatedVault: VaultData) => {
-    setVault(updatedVault);
     const masterPassword = getSessionPassword();
-    if (fileHandle && masterPassword) {
-      await saveVaultToFile(
-        fileHandle,
-        updatedVault,
-        masterPassword,
-        getSessionRecoveryPhrase() || undefined,
-        existingRecoveryData
-      );
-      await updateBiometricDataAfterSave();
+    if (!masterPassword) {
+      throw new Error('Vault is locked');
     }
+    const stamped = stampSave(await prepareForSave(updatedVault));
+    try {
+      if (fileHandle) {
+        await saveVaultToFile(fileHandle, stamped, masterPassword, existingRecoveryData);
+      } else {
+        const encrypted = await encryptVaultWithLayout(stamped, masterPassword, getSessionLayout() ?? defaultLayout());
+        setSessionLayout(encrypted.layout);
+        await saveVaultSnapshot(lastVaultPath || 'vault.dat', await encrypted.blob.arrayBuffer());
+        setHasUnsavedChanges(true);
+      }
+    } catch (err) {
+      console.error('Failed to save vault:', err);
+      setError('Could not save the vault file. Your last change was not saved.');
+      setTimeout(() => setError(''), 5000);
+      throw err;
+    }
+    await recordVaultVersion(stamped);
+    setVault(stamped);
   };
 
   const handleAddEntry = async (entry: Omit<PasswordEntryType, 'id' | 'createdAt' | 'updatedAt'>) => {
@@ -762,27 +847,139 @@ function App() {
       throw new Error('Current password is incorrect');
     }
 
-    setSessionPassword(newPassword);
-    if (fileHandle) {
-      await saveVaultToFile(
-        fileHandle,
-        vault,
-        newPassword,
-        getSessionRecoveryPhrase() || undefined,
-        existingRecoveryData
-      );
+    // Someone who learned the old password and opened the vault once may have
+    // copied the guardian puzzle answer; a fresh puzzle (same guardian cards)
+    // takes that away from them for every file written from now on.
+    const updatedVault: VaultData = {
+      ...vault,
+      socialRecovery: vault.socialRecovery && vault.socialRecovery.rotateOnSave === false
+        ? await rotatePuzzle(vault.socialRecovery)
+        : vault.socialRecovery, // otherwise writeVault rotates on this save anyway
+      updatedAt: Date.now()
+    };
 
-      if (isBiometricEnabled()) {
-        await updateBiometricVaultData(newPassword);
-      }
+    // Local snapshots are encrypted under the old password; don't leave them
+    // around for someone who may have learned it.
+    await clearVaultSnapshots();
+    // Write before switching the session password, so a failed write leaves
+    // memory and disk under the same password.
+    const written = await writeVault(fileHandle, updatedVault, newPassword);
+    setSessionPassword(newPassword);
+    setVault(written);
+
+    if (isBiometricEnabled()) {
+      // The wrapped password is now wrong; it must be re-enrolled.
+      await disableBiometric();
     }
   };
 
-  const handleBiometricSetupComplete = async () => {
+  const handleAddSecretKey = async (secretKey: string) => {
+    if (!vault) return;
+    const normalized = await normalizeSecretKey(secretKey);
+    if (!normalized) throw new Error('Invalid Secret Key');
+    rememberSecretKey(normalized);
+    await persistVault({ ...vault, secretKey: normalized, updatedAt: Date.now() });
+  };
+
+  const handleSaveGuardianRecovery = async (config: SocialRecoveryConfig | undefined) => {
+    if (!vault) return;
+    await persistVault({ ...vault, socialRecovery: config, updatedAt: Date.now() });
+  };
+
+  /** Switch the file to a hidden layout: the decoy becomes visible, this vault moves into the padding. */
+  const handleCreateDecoy = async (duressPassword: string, entryIds: string[]): Promise<string> => {
     const masterPassword = getSessionPassword();
-    if (vault && masterPassword) {
-      await updateBiometricVaultData(masterPassword);
+    if (!vault || !masterPassword) throw new Error('Vault is locked');
+    const setup = await createDecoyVault(vault, masterPassword, duressPassword, vault.entries.filter(e => entryIds.includes(e.id)));
+    const previous = getSessionLayout();
+    setSessionLayout(setup.layout);
+    try {
+      const written = await writeVault(fileHandle, setup.vault, masterPassword);
+      setVault(written);
+    } catch (err) {
+      setSessionLayout(previous);
+      throw err;
     }
+    return setup.decoyPhrase;
+  };
+
+  const handleRemoveDecoy = async () => {
+    const masterPassword = getSessionPassword();
+    if (!vault || !masterPassword) throw new Error('Vault is locked');
+    const { vault: plain, layout } = removeDecoyVault(vault);
+    const previous = getSessionLayout();
+    setSessionLayout(layout);
+    try {
+      const written = await writeVault(fileHandle, plain, masterPassword);
+      setVault(written);
+    } catch (err) {
+      setSessionLayout(previous);
+      throw err;
+    }
+  };
+
+  const handleChangeDuressPassword = async (newPassword: string) => {
+    const masterPassword = getSessionPassword();
+    if (!vault?.decoy || !masterPassword) throw new Error('No decoy vault');
+    if (newPassword === masterPassword) throw new Error('The duress password must differ from your master password');
+    const previous = getSessionLayout();
+    if (!previous) throw new Error('Vault file layout unknown');
+    setSessionLayout(await changeDuressPassword(previous, vault.decoy.password, newPassword, await getDeviceSecretKeys()));
+    try {
+      const written = await writeVault(fileHandle, { ...vault, decoy: { ...vault.decoy, password: newPassword } }, masterPassword);
+      setVault(written);
+    } catch (err) {
+      setSessionLayout(previous);
+      throw err;
+    }
+  };
+
+  const handleRecoverWithGuardians = async (
+    recoveredVault: VaultData,
+    newPassword: string,
+    file: File,
+    handle: FileSystemFileHandle | null,
+    layout: FileLayout
+  ) => {
+    try {
+      setSessionLayout(layout);
+      await clearVaultSnapshots();
+      const written = await writeVault(handle, recoveredVault, newPassword);
+      if (recoveredVault.secretKey) {
+        rememberSecretKey(recoveredVault.secretKey);
+      }
+      if (isBiometricEnabled()) {
+        await disableBiometric();
+      }
+
+      setSessionPassword(newPassword);
+      setSessionRecoveryPhrase(null);
+      setVault(written);
+      applyVaultSettings(recoveredVault);
+      setFileHandle(handle);
+      setExistingRecoveryData(null);
+      setIsLocked(false);
+      setMode('vault');
+      clearUnlockFailures();
+      saveLastVaultPath(file.name);
+      setLastVaultPath(file.name);
+      if (handle) {
+        await saveLastVaultHandle(handle);
+      }
+
+      setSuccess(handle
+        ? 'Vault recovered with guardians. Set up guardian recovery again in Settings.'
+        : 'Vault recovered with guardians and downloaded as a new file. Set up guardian recovery again in Settings.');
+      setTimeout(() => setSuccess(''), 5000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to save recovered vault');
+      setTimeout(() => setError(''), 4000);
+      throw err;
+    }
+  };
+
+  const handleEnableBiometric = async () => {
+    await enableBiometric(getSessionPassword() || '');
   };
 
   const handleRegenerateRecoveryPhrase = async (newPhraseHash: string, newPhrase: string) => {
@@ -790,16 +987,15 @@ function App() {
     const masterPassword = getSessionPassword();
     if (!masterPassword) return;
 
-    const updatedVault = updateVaultMetadata(vault, { recoveryPhraseHash: newPhraseHash });
-    setVault(updatedVault);
+    const updatedVault = await withRecoveryKey(
+      updateVaultMetadata(vault, { recoveryPhraseHash: newPhraseHash }),
+      newPhrase
+    );
+    // The user is told the old phrase stops working, so the new one must be
+    // on disk (or downloaded) before we report success.
+    const written = await writeVault(fileHandle, updatedVault, masterPassword);
+    setVault(written);
     setExistingRecoveryData(null);
-
-    if (fileHandle) {
-      // Phrase needed once to rewrite the recovery block, then discarded.
-      await saveVaultToFile(fileHandle, updatedVault, masterPassword, newPhrase, undefined);
-      setSessionRecoveryPhrase(null);
-      await updateBiometricDataAfterSave();
-    }
   };
 
   const handleUpdateSettings = async (newSettings: VaultSettingsType) => {
@@ -819,12 +1015,7 @@ function App() {
     try {
       const updatedVault = { ...vault, lastBackup: Date.now() };
       const blob = await encryptVault(updatedVault, masterPassword);
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `notes-backup-${new Date().toISOString().split('T')[0]}.dat`;
-      a.click();
-      URL.revokeObjectURL(url);
+      downloadBlob(blob, `notes-backup-${new Date().toISOString().split('T')[0]}.dat`);
       setVault(updatedVault);
       setSuccess('Backup exported successfully');
       setTimeout(() => setSuccess(''), 3000);
@@ -1002,83 +1193,66 @@ function App() {
 
   if (!cryptoReady) {
     return (
-      <div className="min-h-screen bg-vault-dark flex items-center justify-center p-4">
+      <VaultShell>
         <div className="glass-card p-8 max-w-md w-full text-center animate-scaleIn">
-          <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse-soft border border-red-500/20">
-            <AlertTriangle className="text-red-400" size={32} />
+          <div className="w-14 h-14 bg-danger/10 rounded-full flex items-center justify-center mx-auto mb-5 border border-danger/25">
+            <AlertTriangle className="text-danger" size={26} strokeWidth={1.6} />
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">Security Error</h1>
-          <p className="text-gray-400">
+          <h1 className="text-2xl font-normal text-ink mb-2 tracking-[-0.025em]">Security error</h1>
+          <p className="text-muted">
             Cryptographic verification failed. The application cannot run safely.
           </p>
         </div>
         <OfflineIndicator />
-      </div>
+      </VaultShell>
     );
   }
 
   if (isLocked || !vault) {
     if (mode === 'welcome') {
       return (
-        <div className="min-h-screen bg-bg flex items-center justify-center p-4 relative overflow-hidden">
-          <div className="absolute inset-0 ai-grid-bg opacity-30 dark:opacity-20" />
-          <div className="ambient-orb top-[-10%] left-[-5%] w-[420px] h-[420px] bg-accent/20" />
-          <div className="ambient-orb bottom-[-15%] right-[-8%] w-[380px] h-[380px] bg-accent-2/15" style={{ animationDelay: '-4s' }} />
+        <VaultShell
+          footer={
+            <p className="text-[11px] text-muted/80 font-mono tracking-[0.12em] text-center animate-fadeIn" style={{ animationDelay: '0.9s', animationFillMode: 'both' }}>
+              AES-256-GCM · PBKDF2 600K · ZERO KNOWLEDGE
+            </p>
+          }
+        >
+          <div className="flex flex-col items-center text-center w-full max-w-xl">
+            <h1 className="text-[clamp(34px,7.4vw,64px)] font-normal leading-[0.9559] tracking-[-0.0279em] text-ink">
+              <span className="mask-line"><span style={{ animationDelay: '0.2s' }}>Your vault, sealed</span></span>
+              <span className="mask-line"><span style={{ animationDelay: '0.29s' }}>on this device.</span></span>
+            </h1>
+            <p
+              className="mt-5 text-[clamp(16px,2.2vw,20px)] text-muted tracking-[-0.005em] [text-wrap:balance] animate-fadeIn"
+              style={{ animationDelay: '0.7s', animationFillMode: 'both' }}
+            >
+              Open your encrypted vault file, or create a new one in under a minute.
+            </p>
 
-          <div className="glass-card p-8 max-w-2xl w-full animate-scaleIn relative z-10">
-            <div className="text-center mb-8">
-              <div className="inline-flex items-center justify-center w-16 h-16 bg-accent/15 rounded-2xl mb-4 border border-accent/25 animate-soft-glow">
-                <Lock className="text-accent" size={30} />
-              </div>
-              <h1 className="text-3xl font-display font-bold text-ink mb-2 tracking-tight">EnigmaKeep</h1>
-              <p className="text-sm text-accent font-medium">Offline · Zero-knowledge · Yours</p>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <button
-                onClick={() => setMode('open')}
-                className="p-6 rounded-2xl border border-line bg-surface2/50 hover:border-accent/40 hover:bg-surface2 transition-all duration-300 group text-left"
-              >
-                <div className="flex flex-col items-center text-center">
-                  <div className="w-14 h-14 bg-accent/10 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300 border border-accent/20">
-                    <Upload className="text-accent" size={24} />
-                  </div>
-                  <h3 className="font-display font-semibold text-ink mb-1">Open Vault</h3>
-                  <p className="text-sm text-muted">Access your existing password vault</p>
-                </div>
+            <div
+              className="mt-8 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full sm:w-auto animate-fadeIn"
+              style={{ animationDelay: '0.86s', animationFillMode: 'both' }}
+            >
+              <button onClick={() => setMode('open')} className="btn-primary h-12 sm:w-[216px] gap-2 text-[16px]">
+                <Upload size={17} strokeWidth={1.8} />
+                Open vault
               </button>
-
-              <button
-                onClick={() => setMode('create')}
-                className="p-6 rounded-2xl border border-line bg-surface2/50 hover:border-success/40 hover:bg-surface2 transition-all duration-300 group text-left"
-              >
-                <div className="flex flex-col items-center text-center">
-                  <div className="w-14 h-14 bg-success/10 rounded-xl flex items-center justify-center mb-3 group-hover:scale-110 transition-transform duration-300 border border-success/20">
-                    <Plus className="text-success" size={24} />
-                  </div>
-                  <h3 className="font-display font-semibold text-ink mb-1">Create Vault</h3>
-                  <p className="text-sm text-muted">Set up a new secure password vault</p>
-                </div>
+              <button onClick={() => setMode('create')} className="btn-ghost h-12 sm:w-[216px] gap-2 text-[16px]">
+                <Plus size={17} strokeWidth={1.8} />
+                Create a new vault
               </button>
-            </div>
-
-            <div className="mt-8 pt-6 border-t border-line text-center">
-              <p className="text-xs text-muted font-mono tracking-wide">
-                AES-256-GCM · PBKDF2 600K · ZERO KNOWLEDGE
-              </p>
             </div>
           </div>
           <OfflineIndicator />
-        </div>
+        </VaultShell>
       );
     }
 
     if (mode === 'create') {
       return (
-        <div className="min-h-screen bg-bg flex items-center justify-center p-4 relative overflow-hidden">
-          <div className="absolute inset-0 ai-grid-bg opacity-25" />
-          <div className="ambient-orb top-1/4 right-1/4 w-[300px] h-[300px] bg-accent/15" />
-          <div className="glass-card p-6 sm:p-8 animate-scaleIn relative z-10 w-full max-w-lg">
+        <VaultShell>
+          <div className="glass-card p-6 sm:p-8 animate-scaleIn w-full max-w-lg">
             <CreateVaultFlow
               onComplete={handleCreateVaultComplete}
               onCancel={() => setMode('welcome')}
@@ -1086,44 +1260,131 @@ function App() {
             />
           </div>
           <OfflineIndicator />
-        </div>
+        </VaultShell>
       );
     }
 
     if (mode === 'open') {
       return (
-        <div className="min-h-screen bg-bg flex items-center justify-center p-4 relative overflow-hidden">
-          <div className="absolute inset-0 ai-grid-bg opacity-25" />
-          <div className="ambient-orb bottom-1/3 left-1/4 w-[300px] h-[300px] bg-accent-2/15" />
-          <div className="glass-card p-6 sm:p-8 animate-scaleIn w-full max-w-md relative z-10">
+        <VaultShell>
+          <div className="glass-card p-6 sm:p-8 animate-scaleIn w-full max-w-md">
             <LoginScreen
               onLogin={handleLoginWithPassword}
               onRecoverWithSeedPhrase={handleRecoverWithSeedPhrase}
               onBiometricLogin={handleBiometricLoginSuccess}
+              onRecoverWithGuardians={handleRecoverWithGuardians}
               lastVaultPath={lastVaultPath}
               error={error}
             />
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => setMode('welcome')}
-                className="text-sm text-muted hover:text-accent transition-colors"
-              >
-                ← Back to Home
-              </button>
-            </div>
           </div>
+          <button
+            onClick={() => setMode('welcome')}
+            className="mt-6 text-sm text-muted hover:text-ink transition-colors"
+          >
+            ← Back
+          </button>
+          {pendingUnlock && (
+            <ConfirmModal
+              title={pendingUnlock.check.status === 'older' ? 'This vault file is older than expected' : 'This vault file does not match'}
+              message={
+                pendingUnlock.check.status === 'older'
+                  ? `This device last opened version ${pendingUnlock.check.record?.saveCount} of this vault on ${new Date(pendingUnlock.check.record?.at ?? 0).toLocaleString()}, but this file is version ${pendingUnlock.vault.saveCount}. Someone, or a sync service, may have replaced it with an old copy, or you may be restoring an older backup on purpose. Passwords you changed since then would be exposed again.`
+                  : `This file claims to be version ${pendingUnlock.vault.saveCount}, the same as the one this device last opened, but it is a different file. It may have been tampered with or forked by a sync conflict.`
+              }
+              confirmText="Open anyway"
+              cancelText="Don't open"
+              variant="warning"
+              onConfirm={() => {
+                const proceed = pendingUnlock.proceed;
+                setPendingUnlock(null);
+                void proceed();
+              }}
+              onCancel={() => setPendingUnlock(null)}
+            />
+          )}
           <OfflineIndicator />
-        </div>
+        </VaultShell>
       );
     }
 
     return null;
   }
 
+  const handleImportTotp = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        if (file.size > 5 * 1024 * 1024) {
+          throw new Error('File too large');
+        }
+        const parsed: unknown = JSON.parse(await file.text());
+        if (!Array.isArray(parsed)) {
+          throw new Error('Invalid format');
+        }
+        // Rebuild every entry from validated fields: a malformed object
+        // persisted into the vault would crash the 2FA view on every unlock.
+        const importedTotpEntries: TotpEntry[] = [];
+        for (const raw of parsed) {
+          if (!raw || typeof raw !== 'object') continue;
+          const r = raw as Record<string, unknown>;
+          if (typeof r.title !== 'string' || typeof r.secret !== 'string' || !validateSecret(r.secret)) continue;
+          const algorithm = r.algorithm === 'SHA256' || r.algorithm === 'SHA512' ? r.algorithm : 'SHA1';
+          const digits = r.digits === 7 || r.digits === 8 ? r.digits : 6;
+          const period = typeof r.period === 'number' && r.period >= 15 && r.period <= 120 ? Math.floor(r.period) : 30;
+          const now = Date.now();
+          importedTotpEntries.push({
+            id: crypto.randomUUID(),
+            title: r.title.slice(0, 200),
+            issuer: typeof r.issuer === 'string' ? r.issuer.slice(0, 200) : undefined,
+            accountName: typeof r.accountName === 'string' ? r.accountName.slice(0, 200) : undefined,
+            secret: r.secret.replace(/\s/g, '').toUpperCase(),
+            algorithm,
+            digits,
+            period,
+            favorite: r.favorite === true,
+            createdAt: now,
+            updatedAt: now
+          });
+        }
+        if (importedTotpEntries.length === 0) {
+          throw new Error('No valid entries');
+        }
+        await persistVault({
+          ...vault,
+          totpEntries: [...(vault.totpEntries || []), ...importedTotpEntries],
+          updatedAt: Date.now()
+        });
+        setSuccess(`Imported ${importedTotpEntries.length} of ${parsed.length} 2FA code(s)`);
+        setTimeout(() => setSuccess(''), 3000);
+      } catch (err) {
+        setError('Failed to import 2FA codes. Please check the file format.');
+        setTimeout(() => setError(''), 3000);
+      }
+    };
+    input.click();
+  };
+
+  const openNewEntry = () => {
+    setEditingEntry(null);
+    setShowModal(true);
+  };
+
+  const viewTitles = { passwords: 'Passwords', totp: '2FA codes', notes: 'Notes', files: 'Files', settings: 'Settings' } as const;
+  const viewCounts: Partial<Record<keyof typeof viewTitles, [number, string, string]>> = {
+    passwords: [vault.entries.length, 'item', 'items'],
+    totp: [(vault.totpEntries || []).length, 'code', 'codes'],
+    notes: [(vault.notes || []).length, 'note', 'notes'],
+    files: [(vault.files || []).length, 'file', 'files']
+  };
+  const countLine = viewCounts[currentView];
+
   // Vault app main UI
   return (
-    <div className="min-h-screen bg-bg flex">
-      {/* Sidebar */}
+    <div className="h-screen overflow-hidden bg-bg bg-sky flex">
       <Sidebar
         currentView={currentView}
         onViewChange={setCurrentView}
@@ -1131,39 +1392,51 @@ function App() {
         noteCount={(vault.notes || []).length}
         totpCount={(vault.totpEntries || []).length}
         fileCount={(vault.files || []).length}
+        vaultName={fileHandle?.name ?? lastVaultPath ?? undefined}
+        onLock={handleLock}
         isOpen={isSidebarOpen}
         onClose={() => setIsSidebarOpen(false)}
       />
 
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col">
-        {/* Top Bar */}
-        <header className="bg-surface/95 backdrop-blur-xl border-b border-line sticky top-0 z-40">
-          <div className="px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3">
+      <div className="flex-1 min-w-0 flex flex-col">
+        <header className="bg-bg/75 backdrop-blur-xl border-b border-line z-30">
+          <div className="px-4 sm:px-6 h-16 flex items-center justify-between gap-3">
             <div className="flex items-center gap-3 min-w-0">
               <button
                 onClick={() => setIsSidebarOpen(true)}
-                className="md:hidden text-muted hover:text-ink transition-colors shrink-0"
+                className="md:hidden icon-btn -ml-1.5"
                 aria-label="Open menu"
               >
-                <Menu size={22} />
+                <Menu size={20} />
               </button>
-              <h1 className="text-lg sm:text-xl font-display font-semibold text-ink tracking-tight truncate">
-                {currentView === 'passwords' ? 'Passwords' : currentView === 'notes' ? 'Notes' : currentView === 'totp' ? '2FA Codes' : currentView === 'files' ? 'Files' : 'Settings'}
-              </h1>
+              <div className="min-w-0">
+                <h1 className="text-lg font-semibold text-ink tracking-[-0.015em] truncate leading-tight">
+                  {viewTitles[currentView]}
+                </h1>
+                {countLine && (
+                  <p className="text-xs text-muted leading-tight">
+                    {countLine[0]} {countLine[0] === 1 ? countLine[1] : countLine[2]}
+                  </p>
+                )}
+              </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">
-              <ThemeToggle />
+              <div className="hidden sm:block">
+                <ThemeToggle />
+              </div>
               <button
                 onClick={handleSaveVault}
-                className="btn-primary !px-3 sm:!px-4 !py-2 text-sm gap-1.5"
+                className={`${hasUnsavedChanges ? 'btn-primary' : 'btn-ghost'} !px-3 !py-2 text-sm gap-1.5`}
+                title={fileHandle ? 'Save to vault file' : 'Download an updated vault file'}
               >
-                <Download size={15} />
-                <span className="hidden sm:inline">Save</span>
+                {hasUnsavedChanges ? <AlertTriangle size={15} /> : <Download size={15} />}
+                <span className="hidden sm:inline">
+                  {fileHandle ? 'Save' : hasUnsavedChanges ? 'Download unsaved changes' : 'Download'}
+                </span>
               </button>
               <button
                 onClick={handleLock}
-                className="btn-ghost !px-3 sm:!px-4 !py-2 text-sm gap-1.5"
+                className="btn-primary !px-3 !py-2 text-sm gap-1.5"
               >
                 <Lock size={15} />
                 <span className="hidden sm:inline">Lock</span>
@@ -1172,113 +1445,7 @@ function App() {
           </div>
         </header>
 
-        {/* Success/Error Messages */}
-        {success && (
-          <div className="px-6 py-4">
-            <div className="p-4 bg-neon-green/10 border border-neon-green/20 rounded-xl text-neon-green text-sm font-medium animate-slideIn backdrop-blur-sm">
-              {success}
-            </div>
-          </div>
-        )}
-
-        {error && (
-          <div className="px-6 py-4">
-            <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 text-sm font-medium animate-slideIn backdrop-blur-sm">
-              {error}
-            </div>
-          </div>
-        )}
-
-        {/* Content Area */}
-        {currentView === 'settings' && vault ? (
-          <div className="flex-1 overflow-auto p-6">
-            <VaultSettings
-              vault={vault}
-              settings={vaultSettings}
-              masterPassword={getSessionPassword() || ''}
-              onClose={() => setCurrentView('passwords')}
-              onChangeMasterPassword={handleChangeMasterPassword}
-              onRegenerateRecoveryPhrase={handleRegenerateRecoveryPhrase}
-              onUpdateSettings={handleUpdateSettings}
-              onExportBackup={handleExportBackup}
-              onBiometricSetupComplete={handleBiometricSetupComplete}
-            />
-          </div>
-        ) : currentView === 'totp' ? (
-          <div className="flex-1 overflow-auto p-6">
-            <div className="mb-6 flex justify-between items-center">
-              <div className="flex gap-3">
-                {selectedTotpIds.length > 0 && (
-                  <button
-                    onClick={() => setShowTotpExportModal(true)}
-                    className="px-5 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white rounded-xl transition-all duration-200 flex items-center gap-2 font-medium shadow-md hover:shadow-lg"
-                  >
-                    <Download size={18} />
-                    Export Selected ({selectedTotpIds.length})
-                  </button>
-                )}
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    const input = document.createElement('input');
-                    input.type = 'file';
-                    input.accept = '.json';
-                    input.onchange = async (e) => {
-                      const file = (e.target as HTMLInputElement).files?.[0];
-                      if (!file) return;
-                      try {
-                        const content = await file.text();
-                        const importedTotpEntries = JSON.parse(content) as TotpEntry[];
-                        if (!Array.isArray(importedTotpEntries)) {
-                          throw new Error('Invalid format');
-                        }
-                        const updatedVault = {
-                          ...vault,
-                          totpEntries: [...(vault.totpEntries || []), ...importedTotpEntries],
-                          updatedAt: Date.now()
-                        };
-                        await persistVault(updatedVault);
-                        setSuccess(`Imported ${importedTotpEntries.length} 2FA code(s)`);
-                        setTimeout(() => setSuccess(''), 3000);
-                      } catch (err) {
-                        setError('Failed to import 2FA codes. Please check the file format.');
-                        setTimeout(() => setError(''), 3000);
-                      }
-                    };
-                    input.click();
-                  }}
-                  className="px-5 py-3 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-700 hover:to-blue-700 text-white rounded-xl transition-all duration-200 flex items-center gap-2 font-medium shadow-md hover:shadow-lg"
-                >
-                  <Upload size={18} />
-                  Import
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingTotp(null);
-                    setShowTotpModal(true);
-                  }}
-                  className="px-5 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white rounded-xl transition-all duration-200 flex items-center gap-2 font-medium shadow-md hover:shadow-lg"
-                >
-                  <Plus size={18} />
-                  Add 2FA Code
-                </button>
-              </div>
-            </div>
-            <TotpList
-              entries={vault.totpEntries || []}
-              onEdit={(totp) => {
-                setEditingTotp(totp);
-                setShowTotpModal(true);
-              }}
-              onDelete={handleDeleteTotp}
-              onToggleFavorite={handleToggleFavoriteTotp}
-              onCopy={handleCopyTotpCode}
-              selectedIds={selectedTotpIds}
-              onSelectionChange={setSelectedTotpIds}
-            />
-          </div>
-        ) : currentView === 'files' ? (
+        {currentView === 'files' ? (
           <FileExplorer
             folders={vault.folders || []}
             files={vault.files || []}
@@ -1292,112 +1459,192 @@ function App() {
             onDownloadFile={handleDownloadFile}
             onSaveFileText={handleSaveFileText}
           />
-        ) : currentView === 'notes' ? (
-          <NotesList
-            notes={vault.notes || []}
-            onAddNote={() => {
-              setEditingNote(null);
-              setShowNoteModal(true);
-            }}
-            onEditNote={(note) => {
-              setEditingNote(note);
-              setShowNoteModal(true);
-            }}
-            onDeleteNote={handleDeleteNote}
-            onToggleFavorite={handleToggleFavoriteNote}
-          />
         ) : (
-          <div className="flex-1 overflow-auto p-4 sm:p-6">
-            <div className="mb-4 flex flex-col sm:flex-row gap-3">
-              <div className="flex-1 relative">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted" size={18} />
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search title, username, site…"
-                  className="w-full pl-11 pr-4 py-3 ai-input"
+          <main className="flex-1 overflow-auto">
+            <div className="mx-auto w-full max-w-6xl px-4 py-5 sm:px-6 sm:py-6">
+              {currentView === 'settings' ? (
+                <VaultSettings
+                  vault={vault}
+                  settings={vaultSettings}
+                  onClose={() => setCurrentView('passwords')}
+                  onChangeMasterPassword={handleChangeMasterPassword}
+                  onRegenerateRecoveryPhrase={handleRegenerateRecoveryPhrase}
+                  onUpdateSettings={handleUpdateSettings}
+                  onExportBackup={handleExportBackup}
+                  onEnableBiometric={handleEnableBiometric}
+                  onAddSecretKey={handleAddSecretKey}
+                  onSaveGuardianRecovery={handleSaveGuardianRecovery}
+                  onCreateDecoy={handleCreateDecoy}
+                  onRemoveDecoy={handleRemoveDecoy}
+                  onChangeDuressPassword={handleChangeDuressPassword}
+                  sessionKind={getSessionLayout()?.kind ?? 'visible'}
                 />
-              </div>
-              <div className="flex gap-2 shrink-0">
-                <button
-                  onClick={() => setShowImportModal(true)}
-                  className="flex-1 sm:flex-none px-4 py-3 btn-ghost !py-3 border border-line"
-                >
-                  <Upload size={18} />
-                  <span className="hidden sm:inline">Import</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setEditingEntry(null);
-                    setShowModal(true);
-                  }}
-                  className="flex-1 sm:flex-none px-4 py-3 btn-primary !py-3"
-                >
-                  <Plus size={18} />
-                  Add
-                </button>
-              </div>
-            </div>
-
-            {entryCategories.length > 0 && (
-              <div className="mb-4">
-                <CategoryFilter
-                  categories={entryCategories}
-                  selectedCategory={selectedCategory}
-                  onSelectCategory={setSelectedCategory}
-                />
-              </div>
-            )}
-
-            {filteredEntries.length === 0 ? (
-              <div className="text-center py-16 animate-fadeIn">
-                <div className="inline-flex items-center justify-center w-16 h-16 bg-accent/10 rounded-2xl mb-4 border border-accent/20">
-                  <Lock className="text-accent" size={28} />
-                </div>
-                <h3 className="text-xl font-display font-semibold text-ink mb-2">
-                  {searchQuery || selectedCategory ? 'No matches' : 'No passwords yet'}
-                </h3>
-                <p className="text-muted mb-6 text-sm max-w-sm mx-auto">
-                  {searchQuery || selectedCategory
-                    ? 'Try another search or clear the category filter'
-                    : 'Add your first login — title and password is enough'}
-                </p>
-                {!searchQuery && !selectedCategory && (
-                  <button
-                    onClick={() => {
-                      setEditingEntry(null);
-                      setShowModal(true);
+              ) : currentView === 'totp' ? (
+                <>
+                  <div className="mb-4 flex items-center justify-between gap-2">
+                    <div>
+                      {selectedTotpIds.length > 0 && (
+                        <button onClick={() => setShowTotpExportModal(true)} className="btn-ghost !px-3.5 !py-2 text-sm gap-2">
+                          <Download size={16} />
+                          Export {selectedTotpIds.length}
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <button onClick={handleImportTotp} className="btn-ghost !px-3.5 !py-2 text-sm gap-2">
+                        <Upload size={16} />
+                        <span className="hidden sm:inline">Import</span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          setEditingTotp(null);
+                          setShowTotpModal(true);
+                        }}
+                        className="btn-primary !px-3.5 !py-2 text-sm gap-2"
+                      >
+                        <Plus size={16} />
+                        Add code
+                      </button>
+                    </div>
+                  </div>
+                  <TotpList
+                    entries={vault.totpEntries || []}
+                    onEdit={(totp) => {
+                      setEditingTotp(totp);
+                      setShowTotpModal(true);
                     }}
-                    className="btn-primary inline-flex items-center gap-2"
-                  >
-                    <Plus size={18} />
-                    Add first password
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="grid gap-3 sm:gap-4 sm:grid-cols-2 xl:grid-cols-3 vault-stagger">
-                {filteredEntries.map((entry) => (
-                  <PasswordEntry
-                    key={entry.id}
-                    entry={entry}
-                    onEdit={(entry) => {
-                      setEditingEntry(entry);
-                      setShowModal(true);
-                    }}
-                    onDelete={handleDeleteEntry}
-                    onDuplicate={handleDuplicateEntry}
-                    onToggleFavorite={handleToggleFavoriteEntry}
-                    onCopyNotification={(message, countdown) => setCopyNotification({ message, countdown })}
-                    clipboardTimeout={vaultSettings.clipboardTimeout}
+                    onDelete={handleDeleteTotp}
+                    onToggleFavorite={handleToggleFavoriteTotp}
+                    onCopy={handleCopyTotpCode}
+                    selectedIds={selectedTotpIds}
+                    onSelectionChange={setSelectedTotpIds}
                   />
-                ))}
-              </div>
-            )}
-          </div>
+                </>
+              ) : currentView === 'notes' ? (
+                <>
+                  {(vault.notes || []).length > 0 && (
+                    <div className="mb-4 flex justify-end">
+                      <button
+                        onClick={() => {
+                          setEditingNote(null);
+                          setShowNoteModal(true);
+                        }}
+                        className="btn-primary !px-3.5 !py-2 text-sm gap-2"
+                      >
+                        <Plus size={16} />
+                        New note
+                      </button>
+                    </div>
+                  )}
+                  <NotesList
+                    notes={vault.notes || []}
+                    onAddNote={() => {
+                      setEditingNote(null);
+                      setShowNoteModal(true);
+                    }}
+                    onEditNote={(note) => {
+                      setEditingNote(note);
+                      setShowNoteModal(true);
+                    }}
+                    onDeleteNote={handleDeleteNote}
+                    onToggleFavorite={handleToggleFavoriteNote}
+                  />
+                </>
+              ) : (
+                <>
+                  <div className="mb-3 flex gap-2">
+                    <div className="relative flex-1">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted" size={16} />
+                      <input
+                        type="search"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search passwords"
+                        aria-label="Search passwords"
+                        className="ai-input !py-2 !pl-9 text-sm h-10"
+                      />
+                    </div>
+                    <button onClick={() => setShowImportModal(true)} className="btn-ghost !px-3.5 !py-2 text-sm gap-2 h-10" title="Import from another password manager">
+                      <Upload size={16} />
+                      <span className="hidden sm:inline">Import</span>
+                    </button>
+                    <button onClick={openNewEntry} className="btn-primary !px-3.5 !py-2 text-sm gap-2 h-10">
+                      <Plus size={16} />
+                      <span className="hidden sm:inline">New item</span>
+                    </button>
+                  </div>
+
+                  {entryCategories.length > 0 && (
+                    <div className="mb-3">
+                      <CategoryFilter
+                        categories={entryCategories}
+                        selectedCategory={selectedCategory}
+                        onSelectCategory={setSelectedCategory}
+                      />
+                    </div>
+                  )}
+
+                  {filteredEntries.length === 0 ? (
+                    searchQuery || selectedCategory ? (
+                      <EmptyState
+                        icon={<Search size={22} strokeWidth={1.7} />}
+                        title="No matches"
+                        description="Try a different search, or clear the category filter."
+                      />
+                    ) : (
+                      <EmptyState
+                        icon={<KeyRound size={22} strokeWidth={1.7} />}
+                        title="No passwords yet"
+                        description="Add your first login, or import from another password manager. A title and a password are enough."
+                        action={
+                          <div className="flex gap-2">
+                            <button onClick={() => setShowImportModal(true)} className="btn-ghost gap-2">
+                              <Upload size={16} />
+                              Import
+                            </button>
+                            <button onClick={openNewEntry} className="btn-primary gap-2">
+                              <Plus size={16} />
+                              Add password
+                            </button>
+                          </div>
+                        }
+                      />
+                    )
+                  ) : (
+                    <div className="list-panel">
+                      <div className="hidden md:flex items-center gap-3 bg-surface2/50 px-4 py-2 text-xs font-medium text-muted">
+                        <span className="w-9 shrink-0" />
+                        <span className="flex-1">Name</span>
+                        <span className="hidden w-48 lg:block">Website</span>
+                        <span className="w-28">Category</span>
+                        <span className="w-[104px]" />
+                      </div>
+                      {filteredEntries.map((entry) => (
+                        <PasswordEntry
+                          key={entry.id}
+                          entry={entry}
+                          onEdit={(entry) => {
+                            setEditingEntry(entry);
+                            setShowModal(true);
+                          }}
+                          onDelete={handleDeleteEntry}
+                          onDuplicate={handleDuplicateEntry}
+                          onToggleFavorite={handleToggleFavoriteEntry}
+                          onCopyNotification={(message, countdown) => setCopyNotification({ message, countdown })}
+                          clipboardTimeout={vaultSettings.clipboardTimeout}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          </main>
         )}
       </div>
+
+      <StatusToast kind="success" message={success} />
+      <StatusToast kind="error" message={error} />
 
       {showModal && (
         <EntryModal

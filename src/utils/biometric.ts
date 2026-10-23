@@ -1,7 +1,43 @@
+/**
+ * Biometric unlock backed by the WebAuthn PRF extension.
+ *
+ * The master password is wrapped with an AES-GCM key derived (HKDF) from the
+ * authenticator's PRF output. That output only exists after a successful
+ * user-verified WebAuthn ceremony, so the wrapped password cannot be opened by
+ * script on the page or by someone copying the browser profile — the key lives
+ * in the platform authenticator (TPM / Secure Enclave), not in browser storage.
+ *
+ * Authenticators without PRF support are refused rather than falling back to a
+ * key stored next to the ciphertext.
+ */
+
 export interface BiometricCapability {
   available: boolean;
   types: string[];
 }
+
+interface StoredBiometricUnlock {
+  credentialId: string;
+  prfSalt: string;
+  iv: string;
+  ciphertext: string;
+}
+
+const STORAGE_KEY = 'biometric_unlock_v2';
+const HKDF_INFO = 'EnigmaKeep biometric unlock v1';
+
+// Storage used by the old scheme (password wrapped by a key kept in IndexedDB).
+const LEGACY_LOCAL_KEYS = [
+  'biometric_credential_id',
+  'biometric_enabled',
+  'vault_password_encrypted',
+  'vault_file_data'
+];
+const LEGACY_KEY_DB = 'BiometricKeyStore';
+
+type PrfExtensionOutput = {
+  prf?: { enabled?: boolean; results?: { first?: BufferSource } };
+};
 
 export async function checkBiometricSupport(): Promise<BiometricCapability> {
   if (!window.PublicKeyCredential) {
@@ -24,20 +60,91 @@ export async function checkBiometricSupport(): Promise<BiometricCapability> {
   return { available: false, types: [] };
 }
 
-export async function registerBiometric(username: string): Promise<string | null> {
+function readStored(): StoredBiometricUnlock | null {
   try {
-    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredBiometricUnlock;
+    if (!parsed.credentialId || !parsed.prfSalt || !parsed.iv || !parsed.ciphertext) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
 
-    const publicKeyCredentialCreationOptions: PublicKeyCredentialCreationOptions = {
-      challenge,
-      rp: {
-        name: 'EnigmaKeep',
-        id: window.location.hostname
-      },
+export function isBiometricEnabled(): boolean {
+  return readStored() !== null;
+}
+
+function prfFirst(credential: PublicKeyCredential): ArrayBuffer | null {
+  const ext = credential.getClientExtensionResults() as PrfExtensionOutput;
+  const first = ext.prf?.results?.first;
+  if (!first) return null;
+  return first instanceof ArrayBuffer
+    ? first
+    : (first.buffer.slice(first.byteOffset, first.byteOffset + first.byteLength) as ArrayBuffer);
+}
+
+async function wrappingKeyFromPrf(prfOutput: ArrayBuffer): Promise<CryptoKey> {
+  const material = await crypto.subtle.importKey('raw', prfOutput, 'HKDF', false, ['deriveKey']);
+  return crypto.subtle.deriveKey(
+    {
+      name: 'HKDF',
+      hash: 'SHA-256',
+      salt: new Uint8Array(0),
+      info: new TextEncoder().encode(HKDF_INFO)
+    },
+    material,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+/** Run a user-verified assertion and return the PRF output for `prfSalt`. */
+async function evaluatePrf(credentialId: Uint8Array, prfSalt: Uint8Array): Promise<ArrayBuffer> {
+  const assertion = (await navigator.credentials.get({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ id: credentialId, type: 'public-key', transports: ['internal'] }],
+      userVerification: 'required',
+      timeout: 60000,
+      extensions: { prf: { eval: { first: prfSalt } } } as AuthenticationExtensionsClientInputs
+    }
+  })) as PublicKeyCredential | null;
+
+  if (!assertion) {
+    throw new Error('Biometric verification was cancelled');
+  }
+
+  const output = prfFirst(assertion);
+  if (!output) {
+    throw new Error('This authenticator does not support secure biometric unlock (WebAuthn PRF).');
+  }
+  return output;
+}
+
+/**
+ * Register a platform credential and store `password` wrapped under a key that
+ * only the authenticator can reproduce. Throws with a user-facing message.
+ */
+export async function enableBiometric(password: string): Promise<void> {
+  if (!password) {
+    throw new Error('Unlock the vault with your master password first');
+  }
+
+  const prfSalt = crypto.getRandomValues(new Uint8Array(32));
+
+  const credential = (await navigator.credentials.create({
+    publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      rp: { name: 'EnigmaKeep', id: window.location.hostname },
       user: {
-        id: new TextEncoder().encode(username),
-        name: username,
-        displayName: username
+        id: crypto.getRandomValues(new Uint8Array(16)),
+        name: 'EnigmaKeep vault',
+        displayName: 'EnigmaKeep vault'
       },
       pubKeyCredParams: [
         { alg: -7, type: 'public-key' },
@@ -46,231 +153,93 @@ export async function registerBiometric(username: string): Promise<string | null
       authenticatorSelection: {
         authenticatorAttachment: 'platform',
         userVerification: 'required',
-        requireResidentKey: false
+        residentKey: 'discouraged'
       },
       timeout: 60000,
-      attestation: 'none'
-    };
-
-    const credential = await navigator.credentials.create({
-      publicKey: publicKeyCredentialCreationOptions
-    }) as PublicKeyCredential;
-
-    if (!credential) {
-      throw new Error('Failed to create credential');
+      attestation: 'none',
+      extensions: { prf: { eval: { first: prfSalt } } } as AuthenticationExtensionsClientInputs
     }
+  })) as PublicKeyCredential | null;
 
-    const credentialId = arrayBufferToBase64(credential.rawId);
-
-    localStorage.setItem('biometric_credential_id', credentialId);
-    localStorage.setItem('biometric_enabled', 'true');
-
-    return credentialId;
-  } catch (error) {
-    console.error('Biometric registration failed:', error);
-    return null;
+  if (!credential) {
+    throw new Error('Biometric registration was cancelled');
   }
-}
 
-export async function authenticateWithBiometric(username: string): Promise<boolean> {
-  try {
-    const credentialIdStr = localStorage.getItem('biometric_credential_id');
-
-    if (!credentialIdStr) {
-      throw new Error('No biometric credential found');
-    }
-
-    const credentialId = base64ToArrayBuffer(credentialIdStr);
-    const challenge = crypto.getRandomValues(new Uint8Array(32));
-
-    const publicKeyCredentialRequestOptions: PublicKeyCredentialRequestOptions = {
-      challenge,
-      allowCredentials: [
-        {
-          id: credentialId,
-          type: 'public-key',
-          transports: ['internal']
-        }
-      ],
-      userVerification: 'required',
-      timeout: 60000
-    };
-
-    const assertion = await navigator.credentials.get({
-      publicKey: publicKeyCredentialRequestOptions
-    }) as PublicKeyCredential;
-
-    if (!assertion) {
-      throw new Error('Authentication failed');
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Biometric authentication failed:', error);
-    return false;
+  const ext = credential.getClientExtensionResults() as PrfExtensionOutput;
+  if (ext.prf?.enabled === false) {
+    throw new Error('This authenticator does not support secure biometric unlock (WebAuthn PRF).');
   }
-}
 
-export function isBiometricEnabled(): boolean {
-  return localStorage.getItem('biometric_enabled') === 'true';
-}
+  const credentialId = new Uint8Array(credential.rawId);
+  // Some platforms return the PRF result at creation; others need an assertion.
+  const prfOutput = prfFirst(credential) ?? (await evaluatePrf(credentialId, prfSalt));
 
-// IndexedDB-backed key store for biometric encryption
-const BIOMETRIC_DB_NAME = 'BiometricKeyStore';
-const BIOMETRIC_DB_VERSION = 1;
-const BIOMETRIC_STORE_NAME = 'keys';
-const BIOMETRIC_KEY_ID = 'biometric-encryption-key';
-
-async function openBiometricKeyDB(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(BIOMETRIC_DB_NAME, BIOMETRIC_DB_VERSION);
-    request.onerror = () => reject(request.error);
-    request.onsuccess = () => resolve(request.result);
-    request.onupgradeneeded = () => {
-      const db = request.result;
-      if (!db.objectStoreNames.contains(BIOMETRIC_STORE_NAME)) {
-        db.createObjectStore(BIOMETRIC_STORE_NAME);
-      }
-    };
-  });
-}
-
-async function getOrCreateBiometricKey(): Promise<CryptoKey> {
-  const db = await openBiometricKeyDB();
-
-  try {
-    // Try to retrieve existing key
-    const existingKey = await new Promise<CryptoKey | undefined>((resolve, reject) => {
-      const tx = db.transaction(BIOMETRIC_STORE_NAME, 'readonly');
-      const store = tx.objectStore(BIOMETRIC_STORE_NAME);
-      const request = store.get(BIOMETRIC_KEY_ID);
-      request.onsuccess = () => resolve(request.result as CryptoKey | undefined);
-      request.onerror = () => reject(request.error);
-    });
-
-    if (existingKey) {
-      return existingKey;
-    }
-
-    // Generate a new AES-GCM key (non-exportable)
-    const key = await crypto.subtle.generateKey(
-      { name: 'AES-GCM', length: 256 },
-      false,
-      ['encrypt', 'decrypt']
-    );
-
-    // Store the key in IndexedDB
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(BIOMETRIC_STORE_NAME, 'readwrite');
-      const store = tx.objectStore(BIOMETRIC_STORE_NAME);
-      const request = store.put(key, BIOMETRIC_KEY_ID);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-
-    return key;
-  } finally {
-    db.close();
-  }
-}
-
-async function encryptForBiometric(plaintext: string): Promise<string> {
-  const key = await getOrCreateBiometricKey();
+  const key = await wrappingKeyFromPrf(prfOutput);
   const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encoded = new TextEncoder().encode(plaintext);
   const ciphertext = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
+    { name: 'AES-GCM', iv, additionalData: credentialId },
     key,
-    encoded
+    new TextEncoder().encode(password)
   );
-  // Combine IV + ciphertext as base64
-  const combined = new Uint8Array(iv.length + ciphertext.byteLength);
-  combined.set(iv);
-  combined.set(new Uint8Array(ciphertext), iv.length);
-  const binary = String.fromCharCode(...combined);
-  return btoa(binary);
+
+  clearLegacyBiometricData();
+  const stored: StoredBiometricUnlock = {
+    credentialId: bytesToBase64(credentialId),
+    prfSalt: bytesToBase64(prfSalt),
+    iv: bytesToBase64(iv),
+    ciphertext: bytesToBase64(new Uint8Array(ciphertext))
+  };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(stored));
 }
 
-async function decryptForBiometric(encryptedBase64: string): Promise<string> {
-  const key = await getOrCreateBiometricKey();
-  const binary = atob(encryptedBase64);
-  const combined = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    combined[i] = binary.charCodeAt(i);
+/** Prompt for biometric verification and return the unwrapped master password. */
+export async function unlockWithBiometric(): Promise<string> {
+  const stored = readStored();
+  if (!stored) {
+    throw new Error('Biometric unlock is not set up on this device');
   }
-  const iv = combined.slice(0, 12);
-  const ciphertext = combined.slice(12);
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
-    key,
-    ciphertext
-  );
-  return new TextDecoder().decode(decrypted);
-}
 
-async function deleteBiometricKey(): Promise<void> {
+  const credentialId = base64ToBytes(stored.credentialId);
+  const prfOutput = await evaluatePrf(credentialId, base64ToBytes(stored.prfSalt));
+  const key = await wrappingKeyFromPrf(prfOutput);
+
   try {
-    const db = await openBiometricKeyDB();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(BIOMETRIC_STORE_NAME, 'readwrite');
-      const store = tx.objectStore(BIOMETRIC_STORE_NAME);
-      const request = store.delete(BIOMETRIC_KEY_ID);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-    db.close();
-  } catch (error) {
-    console.error('Failed to delete biometric key:', error);
+    const plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: base64ToBytes(stored.iv), additionalData: credentialId },
+      key,
+      base64ToBytes(stored.ciphertext)
+    );
+    return new TextDecoder().decode(plain);
+  } catch {
+    throw new Error('Biometric credential could not be decrypted. Please use your master password.');
   }
 }
 
 export async function disableBiometric(): Promise<void> {
-  localStorage.removeItem('biometric_credential_id');
-  localStorage.removeItem('biometric_enabled');
-  clearBiometricVaultData();
-  await deleteBiometricKey();
-}
-
-export function clearBiometricVaultData(): void {
-  localStorage.removeItem('vault_password_encrypted');
-  // Legacy: full vault ciphertext used to be cached here — always purge it.
-  localStorage.removeItem('vault_file_data');
+  localStorage.removeItem(STORAGE_KEY);
+  clearLegacyBiometricData();
 }
 
 /**
- * Store only the master password (wrapped with a non-exportable IndexedDB key).
- * The vault file itself must be read from the File System handle — never cached
- * as a second plaintext-adjacent copy in localStorage.
+ * Remove data left by the old biometric scheme, whose wrapping key sat in
+ * IndexedDB and could be used without any biometric check.
  */
-export async function updateBiometricVaultData(password: string): Promise<boolean> {
-  if (!isBiometricEnabled()) {
-    return false;
-  }
-
+export function clearLegacyBiometricData(): void {
   try {
-    const encryptedPassword = await encryptForBiometric(password);
-    localStorage.setItem('vault_password_encrypted', encryptedPassword);
-    localStorage.removeItem('vault_file_data');
-    return true;
-  } catch (error) {
-    console.error('Failed to update biometric vault data:', error);
-    return false;
+    for (const key of LEGACY_LOCAL_KEYS) {
+      localStorage.removeItem(key);
+    }
+  } catch {
+    /* ignore */
+  }
+  try {
+    indexedDB.deleteDatabase(LEGACY_KEY_DB);
+  } catch {
+    /* ignore */
   }
 }
 
-export async function decryptBiometricPassword(): Promise<string | null> {
-  const stored = localStorage.getItem('vault_password_encrypted');
-  if (!stored) return null;
-  try {
-    return await decryptForBiometric(stored);
-  } catch (error) {
-    console.error('Failed to decrypt biometric password:', error);
-    return null;
-  }
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
+function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]);
@@ -278,11 +247,11 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-function base64ToArrayBuffer(base64: string): ArrayBuffer {
+function base64ToBytes(base64: string): Uint8Array {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
   }
-  return bytes.buffer;
+  return bytes;
 }

@@ -1,89 +1,220 @@
-import { useState, useEffect } from 'react';
-import { Key, Shield, Clock, Download, AlertTriangle, Check, Info, FileDown, Lock, Zap } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { getSessionPassword } from '../utils/sessionSecrets';
+import { Check, AlertTriangle, Download, FileDown, KeyRound, ShieldCheck, LifeBuoy, SlidersHorizontal, Archive } from 'lucide-react';
 import type { VaultData, VaultSettings as VaultSettingsType } from '../types/vault';
 import { generateRecoveryPhrase, deriveKeyFromRecoveryPhrase } from '../crypto/recoveryPhrase';
 import { RegenerateRecoveryFlow } from './RegenerateRecoveryFlow';
 import { exportToCSV, exportToJSON } from '../utils/importExport';
 import { BiometricSetup } from './BiometricSetup';
-import { calculateSecurityMetrics, getDeviceInfo } from '../crypto/deviceBinding';
+import { SecretKeyKit } from './SecretKeyKit';
+import { GuardianRecoverySettings } from './GuardianRecoverySettings';
+import type { SocialRecoveryConfig } from '../crypto/socialRecovery';
+import { generateSecretKey } from '../crypto/secretKey';
+import { calculateSecurityMetrics, type SecurityMetrics } from '../utils/securityMetrics';
+import { calculatePasswordStrength } from '../utils/passwordStrength';
+import { PasswordStrengthMeter } from './PasswordStrengthMeter';
+import { SettingsCard, SettingRow, Toggle, Select, StatusToast } from './ui';
+
+const LEVEL_TONE_CLASS: Record<SecurityMetrics['levelTone'], string> = {
+  success: 'text-success',
+  warning: 'text-warn',
+  danger: 'text-danger'
+};
+
+type Tab = 'general' | 'security' | 'recovery' | 'backup';
+
+const TABS: { id: Tab; label: string; icon: typeof KeyRound }[] = [
+  { id: 'general', label: 'General', icon: SlidersHorizontal },
+  { id: 'security', label: 'Security', icon: ShieldCheck },
+  { id: 'recovery', label: 'Recovery', icon: LifeBuoy },
+  { id: 'backup', label: 'Backup & export', icon: Archive }
+];
+
+const MINUTE = 60_000;
+const IDLE_OPTIONS = [1, 5, 10, 15, 30, 60].map(m => ({ value: m * MINUTE, label: m === 1 ? '1 minute' : m === 60 ? '1 hour' : `${m} minutes` }));
+const CLIPBOARD_OPTIONS = [10, 15, 30, 60, 90, 120].map(s => ({ value: s * 1000, label: s < 60 ? `${s} seconds` : s === 60 ? '1 minute' : `${s / 60} minutes` }));
+
+/** Keeps a saved value selectable even if it isn't one of the presets. */
+function withCurrent(options: { value: number; label: string }[], current: number, unit: (v: number) => string) {
+  return options.some(o => o.value === current) ? options : [...options, { value: current, label: unit(current) }].sort((a, b) => a.value - b.value);
+}
+
+const formatDateTime = (ts?: number) => (ts ? new Date(ts).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'Never');
 
 interface Props {
   vault: VaultData;
   settings: VaultSettingsType;
-  masterPassword: string;
   onClose: () => void;
   onChangeMasterPassword: (oldPassword: string, newPassword: string) => Promise<void>;
   onRegenerateRecoveryPhrase: (newPhraseHash: string, newPhrase: string) => Promise<void>;
   onUpdateSettings: (settings: VaultSettingsType) => void;
   onExportBackup: () => void;
-  onBiometricSetupComplete?: () => Promise<void>;
+  onEnableBiometric: () => Promise<void>;
+  onAddSecretKey: (secretKey: string) => Promise<void>;
+  onSaveGuardianRecovery: (config: SocialRecoveryConfig | undefined) => Promise<void>;
+  /** Creates the decoy and returns its recovery phrase (shown once). */
+  onCreateDecoy: (duressPassword: string, entryIds: string[]) => Promise<string>;
+  onRemoveDecoy: () => Promise<void>;
+  onChangeDuressPassword: (newPassword: string) => Promise<void>;
+  /** 'hidden' when this session is a real vault living behind a decoy. */
+  sessionKind: 'visible' | 'hidden';
 }
 
 export function VaultSettings({
   vault,
   settings,
-  masterPassword: _masterPassword,
   onClose: _onClose,
   onChangeMasterPassword,
   onRegenerateRecoveryPhrase,
   onUpdateSettings,
   onExportBackup,
-  onBiometricSetupComplete
+  onEnableBiometric,
+  onAddSecretKey,
+  onSaveGuardianRecovery,
+  onCreateDecoy,
+  onRemoveDecoy,
+  onChangeDuressPassword,
+  sessionKind
 }: Props) {
-  const [activeTab, setActiveTab] = useState<'general' | 'security' | 'backup'>('general');
+  const [activeTab, setActiveTab] = useState<Tab>('general');
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [changingPassword, setChangingPassword] = useState(false);
   const [showRecoveryFlow, setShowRecoveryFlow] = useState(false);
   const [pendingRecoveryPhrase, setPendingRecoveryPhrase] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [localSettings, setLocalSettings] = useState(settings);
-  const [securityMetrics, setSecurityMetrics] = useState<any>(null);
-  const deviceInfo = getDeviceInfo();
+  const [showSecretKeyKit, setShowSecretKeyKit] = useState(false);
+  const [pendingSecretKey, setPendingSecretKey] = useState('');
+  const [pendingSecretKeySaved, setPendingSecretKeySaved] = useState(false);
+  const [duressPassword, setDuressPassword] = useState('');
+  const [duressConfirm, setDuressConfirm] = useState('');
+  const [decoyEntryIds, setDecoyEntryIds] = useState<string[]>([]);
+  const [decoyAck, setDecoyAck] = useState(false);
+  const [decoyBusy, setDecoyBusy] = useState(false);
+  const [decoyPhrase, setDecoyPhrase] = useState('');
+  const [showChangeDuress, setShowChangeDuress] = useState(false);
+  const [newDuress, setNewDuress] = useState('');
+  const [newDuressConfirm, setNewDuressConfirm] = useState('');
+
+  const duressStrength = duressPassword ? calculatePasswordStrength(duressPassword) : null;
+  const canCreateDecoy =
+    !!vault.recoveryEncKey && !!duressStrength && duressStrength.meetsMinimum && !duressStrength.isCommon &&
+    duressPassword === duressConfirm && decoyAck && !decoyBusy;
+  const newDuressStrength = newDuress ? calculatePasswordStrength(newDuress) : null;
+  const canChangeDuress =
+    !!newDuressStrength && newDuressStrength.meetsMinimum && !newDuressStrength.isCommon && newDuress === newDuressConfirm && !decoyBusy;
+
+  const handleCreateDecoy = async () => {
+    setDecoyBusy(true);
+    try {
+      const phrase = await onCreateDecoy(duressPassword, decoyEntryIds);
+      setDecoyPhrase(phrase);
+      setDuressPassword('');
+      setDuressConfirm('');
+      setDecoyEntryIds([]);
+      setDecoyAck(false);
+      setSuccess('Decoy vault created. Your real vault is now hidden in the file.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to create the decoy vault');
+    } finally {
+      setDecoyBusy(false);
+    }
+  };
+
+  const handleRemoveDecoy = async () => {
+    if (!window.confirm('Turn off the decoy vault? The decoy and its contents are discarded; this vault becomes the only one in the file.')) return;
+    setDecoyBusy(true);
+    try {
+      await onRemoveDecoy();
+      setDecoyPhrase('');
+      setSuccess('Decoy vault removed.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to remove the decoy vault');
+    } finally {
+      setDecoyBusy(false);
+    }
+  };
+
+  const handleChangeDuress = async () => {
+    setDecoyBusy(true);
+    try {
+      await onChangeDuressPassword(newDuress);
+      setNewDuress('');
+      setNewDuressConfirm('');
+      setShowChangeDuress(false);
+      setSuccess('Duress password changed.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to change the duress password');
+    } finally {
+      setDecoyBusy(false);
+    }
+  };
+
+  // Read the password straight from the session store instead of taking it as
+  // a prop, so it never sits in a component tree (DevTools, error reports).
+  const securityMetrics: SecurityMetrics | null = useMemo(() => {
+    const masterPassword = getSessionPassword();
+    return masterPassword
+      ? calculateSecurityMetrics(masterPassword, vault.kdfIterations || 600000, !!vault.recoveryEncKey)
+      : null;
+  }, [vault.kdfIterations, vault.recoveryEncKey, vault.updatedAt]);
+
+  // Vaults created before the recovery key was stored keep an old recovery copy.
+  const recoveryCopyStale = !!vault.recoveryPhraseHash && !vault.recoveryEncKey;
 
   useEffect(() => {
-    const loadSecurityMetrics = async () => {
-      try {
-        const vaultJson = JSON.stringify(vault);
-        const metrics = await calculateSecurityMetrics(vaultJson, vault.kdfIterations || 600000);
-        setSecurityMetrics(metrics);
-      } catch (err) {
-        console.error('Failed to calculate security metrics:', err);
-      }
-    };
-    loadSecurityMetrics();
-  }, [vault]);
+    if (!success && !error) return;
+    const t = setTimeout(() => {
+      setSuccess('');
+      setError('');
+    }, success ? 2500 : 4000);
+    return () => clearTimeout(t);
+  }, [success, error]);
+
+  const updateSetting = (patch: Partial<VaultSettingsType>) => {
+    onUpdateSettings({ ...settings, ...patch });
+    setSuccess('Settings saved');
+  };
+
+  const handleStartAddSecretKey = async () => {
+    setPendingSecretKey(await generateSecretKey());
+    setPendingSecretKeySaved(false);
+  };
+
+  const handleConfirmAddSecretKey = async () => {
+    try {
+      await onAddSecretKey(pendingSecretKey);
+      setPendingSecretKey('');
+      setSuccess('Secret Key added. Your vault now needs your password and Secret Key.');
+    } catch {
+      setError('Failed to add Secret Key');
+    }
+  };
+
+  const newPasswordStrength = newPassword ? calculatePasswordStrength(newPassword) : null;
+  const canChangePassword =
+    !!oldPassword && !!newPasswordStrength?.meetsMinimum && !newPasswordStrength.isCommon && newPassword === confirmPassword;
 
   const handleChangePassword = async () => {
-    if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-
-    if (newPassword.length < 12) {
-      setError('New password must be at least 12 characters');
-      setTimeout(() => setError(''), 3000);
-      return;
-    }
-
+    if (!canChangePassword) return;
+    setChangingPassword(true);
     try {
       await onChangeMasterPassword(oldPassword, newPassword);
       setOldPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setSuccess('Master password changed successfully');
-      setTimeout(() => setSuccess(''), 3000);
+      setSuccess('Master password changed');
     } catch (err: any) {
       setError(err.message || 'Failed to change password');
-      setTimeout(() => setError(''), 3000);
+    } finally {
+      setChangingPassword(false);
     }
   };
 
   const handleRegenerateRecoveryPhrase = () => {
-    const newPhrase = generateRecoveryPhrase();
-    setPendingRecoveryPhrase(newPhrase);
+    setPendingRecoveryPhrase(generateRecoveryPhrase());
     setShowRecoveryFlow(true);
   };
 
@@ -93,558 +224,382 @@ export function VaultSettings({
       await onRegenerateRecoveryPhrase(phraseHash, pendingRecoveryPhrase);
       setShowRecoveryFlow(false);
       setPendingRecoveryPhrase('');
-      setSuccess('Recovery phrase regenerated successfully');
-      setTimeout(() => setSuccess(''), 3000);
-    } catch (err) {
+      setSuccess('New recovery phrase saved');
+    } catch {
       setError('Failed to regenerate recovery phrase');
-      setTimeout(() => setError(''), 3000);
     }
   };
 
-  const handleSaveSettings = () => {
-    onUpdateSettings(localSettings);
-    setSuccess('Settings saved successfully');
-    setTimeout(() => setSuccess(''), 3000);
-  };
-
-  const handleExportCSV = () => {
-    const csv = exportToCSV(vault.entries);
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
+  const download = (content: string, type: string, ext: string) => {
+    const url = URL.createObjectURL(new Blob([content], { type }));
     const a = document.createElement('a');
     a.href = url;
-    a.download = `enigmakeep-export-${Date.now()}.csv`;
+    a.download = `enigmakeep-export-${Date.now()}.${ext}`;
     a.click();
     URL.revokeObjectURL(url);
-    setSuccess('CSV exported successfully');
-    setTimeout(() => setSuccess(''), 3000);
+    setSuccess(`${ext.toUpperCase()} exported`);
   };
 
-  const handleExportJSON = () => {
-    const json = exportToJSON(vault.entries);
-    const blob = new Blob([json], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `enigmakeep-export-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setSuccess('JSON exported successfully');
-    setTimeout(() => setSuccess(''), 3000);
-  };
+  const itemCount =
+    vault.entries.length + (vault.notes?.length || 0) + (vault.totpEntries?.length || 0) + (vault.files?.length || 0);
 
   return (
-    <div className="animate-fadeIn">
-      <div className="bg-surface border border-line rounded-2xl shadow-2xl w-full overflow-hidden">
-        <div className="bg-surface2 px-6 py-5">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 bg-accent/10 rounded-xl flex items-center justify-center">
-              <Shield className="text-accent" size={28} />
-            </div>
-            <div>
-              <h2 className="text-2xl font-bold text-ink">Vault Settings</h2>
-              <p className="text-muted text-sm mt-0.5">Configure your vault preferences</p>
-            </div>
-          </div>
-        </div>
+    <div className="mx-auto max-w-3xl animate-fadeIn">
+      <nav className="mb-6 flex gap-1 overflow-x-auto border-b border-line" aria-label="Settings sections">
+        {TABS.map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            onClick={() => setActiveTab(id)}
+            aria-current={activeTab === id ? 'page' : undefined}
+            className={`-mb-px flex shrink-0 items-center gap-2 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
+              activeTab === id ? 'border-accent text-ink' : 'border-transparent text-muted hover:text-ink'
+            }`}
+          >
+            <Icon size={15} />
+            {label}
+          </button>
+        ))}
+      </nav>
 
-          {(error || success) && (
-            <div className="px-6 pt-4">
-              {error && (
-                <div className="p-3 bg-danger/10 border border-danger/30 rounded-lg text-danger text-sm animate-slideIn">
-                  {error}
+      {activeTab === 'general' && (
+        <div className="space-y-5">
+          <SettingsCard title="Auto-lock" description="Lock the vault automatically so an unattended screen doesn't expose it.">
+            <SettingRow title="Lock after inactivity" description="Time without keyboard or mouse activity.">
+              <Select
+                label="Lock after inactivity"
+                value={settings.idleTimeout}
+                options={withCurrent(IDLE_OPTIONS, settings.idleTimeout, v => `${Math.round(v / MINUTE)} minutes`)}
+                onChange={(v) => updateSetting({ idleTimeout: v })}
+              />
+            </SettingRow>
+            <SettingRow title="Lock when the window is hidden" description="Switching apps or minimizing the browser locks the vault.">
+              <Toggle label="Lock when the window is hidden" checked={!!settings.autoLockOnMinimize} onChange={(v) => updateSetting({ autoLockOnMinimize: v })} />
+            </SettingRow>
+            <SettingRow title="Lock when the tab closes" description="Clears the session from memory when you close this tab.">
+              <Toggle label="Lock when the tab closes" checked={!!settings.lockOnTabClose} onChange={(v) => updateSetting({ lockOnTabClose: v })} />
+            </SettingRow>
+          </SettingsCard>
+
+          <SettingsCard title="Clipboard" description="Copied passwords are removed from the clipboard after a short time.">
+            <SettingRow title="Clear copied passwords after">
+              <Select
+                label="Clear copied passwords after"
+                value={settings.clipboardTimeout}
+                options={withCurrent(CLIPBOARD_OPTIONS, settings.clipboardTimeout, v => `${Math.round(v / 1000)} seconds`)}
+                onChange={(v) => updateSetting({ clipboardTimeout: v })}
+              />
+            </SettingRow>
+            <SettingRow title="Clear the clipboard when locking">
+              <Toggle label="Clear the clipboard when locking" checked={!!settings.clearClipboardOnLock} onChange={(v) => updateSetting({ clearClipboardOnLock: v })} />
+            </SettingRow>
+            <SettingRow title="Allow text selection" description="When off, vault text cannot be selected or long-pressed, which makes casual copying harder. A web page cannot block screenshots.">
+              <Toggle label="Allow text selection" checked={!!settings.allowScreenshots} onChange={(v) => updateSetting({ allowScreenshots: v })} />
+            </SettingRow>
+          </SettingsCard>
+
+          <SettingsCard title="About this vault">
+            <dl className="grid grid-cols-1 gap-x-8 gap-y-3 px-5 py-4 text-sm sm:grid-cols-2">
+              {[
+                ['Items', String(itemCount)],
+                ['Encryption', vault.encryptionType || 'AES-256-GCM'],
+                ['Key derivation', `PBKDF2-SHA256, ${(vault.kdfIterations || 600000).toLocaleString()} rounds`],
+                ['Secret Key', vault.secretKey ? 'On' : 'Off'],
+                ['Created', formatDateTime(vault.createdAt)],
+                ['Last changed', formatDateTime(vault.updatedAt)]
+              ].map(([k, v]) => (
+                <div key={k} className="flex justify-between gap-4 sm:block">
+                  <dt className="text-muted">{k}</dt>
+                  <dd className="text-ink sm:mt-0.5">{v}</dd>
                 </div>
-              )}
-              {success && (
-                <div className="p-3 bg-success/10 border border-success/30 rounded-lg text-success text-sm animate-slideIn">
-                  {success}
+              ))}
+            </dl>
+          </SettingsCard>
+        </div>
+      )}
+
+      {activeTab === 'security' && (
+        <div className="space-y-5">
+          {securityMetrics && (
+            <SettingsCard title="Security overview" description="How well a stolen copy of your vault file would hold up.">
+              <div className="grid grid-cols-1 divide-y divide-line sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                <div className="px-5 py-4">
+                  <div className="text-xs text-muted">Protection level</div>
+                  <div className={`mt-1 text-lg font-semibold ${LEVEL_TONE_CLASS[securityMetrics.levelTone]}`}>{securityMetrics.securityLevel}</div>
                 </div>
-              )}
+                <div className="px-5 py-4">
+                  <div className="text-xs text-muted">Master password</div>
+                  <div className="mt-1 text-lg font-semibold text-ink">~{securityMetrics.passwordEntropyBits} bits</div>
+                </div>
+                <div className="px-5 py-4">
+                  <div className="text-xs text-muted">Time to crack a stolen file</div>
+                  <div className="mt-1 text-lg font-semibold text-ink">{securityMetrics.estimatedCrackTime}</div>
+                </div>
+              </div>
+              <div className="px-5 py-4">
+                <ul className="grid gap-2 sm:grid-cols-2">
+                  {securityMetrics.protections.map((protection) => (
+                    <li key={protection} className="flex items-start gap-2 text-[13px] text-muted">
+                      <Check size={15} className="mt-0.5 shrink-0 text-success" />
+                      <span>{protection}</span>
+                    </li>
+                  ))}
+                </ul>
+                <p className="mt-3 text-xs text-muted/80">
+                  Estimate for an attacker with 100 high-end GPUs guessing your master password. A longer, random password raises it the most.
+                </p>
+              </div>
+            </SettingsCard>
+          )}
+
+          <SettingsCard
+            title="Secret Key"
+            description={
+              vault.secretKey
+                ? 'On. Opening this vault needs your master password and your Secret Key, so a stolen file cannot be brute-forced.'
+                : 'Off. Anyone with a copy of your vault file can try to guess your master password. A Secret Key adds 128 random bits that stay on your devices.'
+            }
+            action={
+              vault.secretKey ? (
+                <button onClick={() => setShowSecretKeyKit(v => !v)} className="btn-ghost !px-3.5 !py-2 text-sm">
+                  {showSecretKeyKit ? 'Hide kit' : 'Emergency Kit'}
+                </button>
+              ) : !pendingSecretKey ? (
+                <button onClick={handleStartAddSecretKey} className="btn-primary !px-3.5 !py-2 text-sm">Turn on</button>
+              ) : undefined
+            }
+          >
+            {vault.secretKey && showSecretKeyKit && (
+              <div className="px-5 py-4">
+                <SecretKeyKit secretKey={vault.secretKey} />
+              </div>
+            )}
+            {!vault.secretKey && pendingSecretKey && (
+              <div className="space-y-4 px-5 py-4">
+                <p className="text-sm text-muted">
+                  Save this Emergency Kit first. Once it's on, opening the vault on a new device needs this key (or your recovery phrase).
+                </p>
+                <SecretKeyKit secretKey={pendingSecretKey} onSaved={() => setPendingSecretKeySaved(true)} />
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => setPendingSecretKey('')} className="btn-ghost !px-4 !py-2 text-sm">Cancel</button>
+                  <button onClick={handleConfirmAddSecretKey} disabled={!pendingSecretKeySaved} className="btn-primary !px-4 !py-2 text-sm">
+                    I've saved it, turn on
+                  </button>
+                </div>
+              </div>
+            )}
+          </SettingsCard>
+
+          <BiometricSetup onEnable={onEnableBiometric} />
+
+          <SettingsCard title="Master password" description="Changing it re-encrypts the vault. Biometric unlock turns off until you enable it again.">
+            <div className="grid gap-4 px-5 py-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-ink/80">Current password</label>
+                <input type="password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="ai-input !py-2.5" autoComplete="current-password" />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-ink/80">New password</label>
+                  <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="ai-input !py-2.5" autoComplete="new-password" />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-ink/80">Confirm new password</label>
+                  <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="ai-input !py-2.5" autoComplete="new-password" />
+                  {confirmPassword && newPassword !== confirmPassword && <p className="mt-1 text-xs text-danger">Passwords do not match</p>}
+                </div>
+              </div>
+              {newPassword && <PasswordStrengthMeter password={newPassword} />}
+              <div className="flex justify-end">
+                <button onClick={handleChangePassword} disabled={!canChangePassword || changingPassword} className="btn-primary !px-4 !py-2 text-sm">
+                  {changingPassword ? 'Changing...' : 'Change password'}
+                </button>
+              </div>
+            </div>
+          </SettingsCard>
+
+          <SettingsCard
+            title="Decoy vault"
+            description={
+              vault.decoy
+                ? 'On. A duress password opens a harmless decoy from this same file. In a single copy of the file, this vault cannot be told apart from random padding.'
+                : 'Off. A duress password would open a harmless decoy vault from the same file, so you can hand over a password under pressure without revealing this vault.'
+            }
+          >
+            {decoyPhrase ? (
+              <div className="space-y-3 px-5 py-4">
+                <p className="text-sm text-ink">The decoy has its own recovery phrase, like any vault. Keeping it is optional; it only opens the decoy.</p>
+                <p className="rounded-lg border border-line bg-surface2 p-3 font-mono text-sm text-ink">{decoyPhrase}</p>
+                <div className="flex justify-end">
+                  <button onClick={() => setDecoyPhrase('')} className="btn-ghost !px-4 !py-2 text-sm">Done</button>
+                </div>
+              </div>
+            ) : vault.decoy ? (
+              <div className="space-y-4 px-5 py-4">
+                <p className="text-sm text-muted">
+                  Created {formatDateTime(vault.decoy.createdAt)}. To change what the decoy contains, lock and unlock with the duress password; edits made there never touch this vault.
+                  Someone who compares several versions of the file over time can notice that the padding changes when this vault is saved, so keep old copies out of reach.
+                </p>
+                {showChangeDuress ? (
+                  <div className="grid gap-4">
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-ink/80">New duress password</label>
+                        <input type="password" value={newDuress} onChange={(e) => setNewDuress(e.target.value)} className="ai-input !py-2.5" autoComplete="new-password" />
+                      </div>
+                      <div>
+                        <label className="mb-1.5 block text-sm font-medium text-ink/80">Confirm duress password</label>
+                        <input type="password" value={newDuressConfirm} onChange={(e) => setNewDuressConfirm(e.target.value)} className="ai-input !py-2.5" autoComplete="new-password" />
+                        {newDuressConfirm && newDuress !== newDuressConfirm && <p className="mt-1 text-xs text-danger">Passwords do not match</p>}
+                      </div>
+                    </div>
+                    {newDuress && <PasswordStrengthMeter password={newDuress} />}
+                    <div className="flex justify-end gap-2">
+                      <button onClick={() => setShowChangeDuress(false)} className="btn-ghost !px-4 !py-2 text-sm">Cancel</button>
+                      <button onClick={handleChangeDuress} disabled={!canChangeDuress} className="btn-primary !px-4 !py-2 text-sm">
+                        {decoyBusy ? 'Saving…' : 'Change duress password'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => setShowChangeDuress(true)} disabled={decoyBusy} className="btn-ghost !px-3.5 !py-2 text-sm">Change duress password</button>
+                    <button onClick={handleRemoveDecoy} disabled={decoyBusy} className="btn-ghost !px-3.5 !py-2 text-sm text-danger">Turn off</button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4 px-5 py-4">
+                {!vault.recoveryEncKey && (
+                  <p className="text-sm text-warn">Set a recovery phrase (Recovery tab) before creating a decoy; the hidden vault must stay recoverable.</p>
+                )}
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-ink/80">Duress password</label>
+                    <input type="password" value={duressPassword} onChange={(e) => setDuressPassword(e.target.value)} className="ai-input !py-2.5" autoComplete="new-password" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-ink/80">Confirm duress password</label>
+                    <input type="password" value={duressConfirm} onChange={(e) => setDuressConfirm(e.target.value)} className="ai-input !py-2.5" autoComplete="new-password" />
+                    {duressConfirm && duressPassword !== duressConfirm && <p className="mt-1 text-xs text-danger">Passwords do not match</p>}
+                  </div>
+                </div>
+                {duressPassword && <PasswordStrengthMeter password={duressPassword} />}
+                <div>
+                  <div className="mb-1.5 text-sm font-medium text-ink/80">Entries to copy into the decoy</div>
+                  {vault.entries.length === 0 ? (
+                    <p className="text-sm text-muted">No entries yet; the decoy will start empty. You can fill it later by unlocking with the duress password.</p>
+                  ) : (
+                    <div className="max-h-48 space-y-1 overflow-auto rounded-lg border border-line p-2">
+                      {vault.entries.map((entry) => (
+                        <label key={entry.id} className="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-sm text-ink hover:bg-ink/[0.03]">
+                          <input
+                            type="checkbox"
+                            checked={decoyEntryIds.includes(entry.id)}
+                            onChange={(e) => setDecoyEntryIds(e.target.checked ? [...decoyEntryIds, entry.id] : decoyEntryIds.filter(id => id !== entry.id))}
+                            className="h-4 w-4 accent-accent"
+                          />
+                          <span className="truncate">{entry.title}</span>
+                          {entry.username && <span className="truncate text-muted">· {entry.username}</span>}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <p className="mt-1 text-xs text-muted">Copy a few harmless logins so the decoy looks lived-in. Nothing else from this vault goes into it.</p>
+                </div>
+                <label className="flex items-start gap-3 rounded-lg border border-line bg-surface2 p-3 text-sm text-ink">
+                  <input type="checkbox" checked={decoyAck} onChange={(e) => setDecoyAck(e.target.checked)} className="mt-0.5 h-4 w-4 accent-accent" />
+                  <span>
+                    I am in my real vault, not inside a decoy.
+                    {sessionKind === 'visible' && ' Creating a decoy from inside a decoy would overwrite the hidden vault behind it.'}
+                  </span>
+                </label>
+                <div className="flex justify-end">
+                  <button onClick={handleCreateDecoy} disabled={!canCreateDecoy} className="btn-primary !px-4 !py-2 text-sm">
+                    {decoyBusy ? 'Creating…' : 'Create decoy vault'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </SettingsCard>
+        </div>
+      )}
+
+      {activeTab === 'recovery' && (
+        <div className="space-y-5">
+          {recoveryCopyStale && (
+            <div className="flex items-start gap-3 rounded-xl border border-danger/30 bg-danger/10 p-4 text-sm text-ink">
+              <AlertTriangle size={18} className="mt-0.5 shrink-0 text-danger" />
+              <span>
+                Your recovery copy was made by an older version and isn't updated when you save, so recovering would restore old data.
+                Generate a new recovery phrase once to fix this.
+              </span>
             </div>
           )}
 
-          <div className="flex border-b border-line px-6">
-            <button
-              onClick={() => setActiveTab('general')}
-              className={`px-6 py-3 font-medium transition-all duration-200 border-b-2 ${
-                activeTab === 'general'
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-muted hover:text-ink'
-              }`}
-            >
-              General
-            </button>
-            <button
-              onClick={() => setActiveTab('security')}
-              className={`px-6 py-3 font-medium transition-all duration-200 border-b-2 ${
-                activeTab === 'security'
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-muted hover:text-ink'
-              }`}
-            >
-              Security
-            </button>
-            <button
-              onClick={() => setActiveTab('backup')}
-              className={`px-6 py-3 font-medium transition-all duration-200 border-b-2 ${
-                activeTab === 'backup'
-                  ? 'border-accent text-accent'
-                  : 'border-transparent text-muted hover:text-ink'
-              }`}
-            >
-              Backup
-            </button>
-          </div>
-
-          <div className="flex-1 overflow-y-auto p-6">
-            {activeTab === 'general' && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-                    <Info size={20} className="text-accent" />
-                    Vault Information
-                  </h3>
-                  <div className="bg-surface2 rounded-xl p-4 space-y-3 border border-line">
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-muted">Created:</span>
-                      <span className="text-sm text-ink">{new Date(vault.createdAt).toLocaleString()}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-muted">Last Modified:</span>
-                      <span className="text-sm text-ink">{new Date(vault.updatedAt).toLocaleString()}</span>
-                    </div>
-                    {vault.lastBackup && (
-                      <div className="flex justify-between">
-                        <span className="text-sm font-medium text-muted">Last Backup:</span>
-                        <span className="text-sm text-ink">{new Date(vault.lastBackup).toLocaleString()}</span>
-                      </div>
-                    )}
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-muted">Encryption:</span>
-                      <span className="text-sm text-ink font-mono">{vault.encryptionType || 'AES-256-GCM'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-muted">KDF Iterations:</span>
-                      <span className="text-sm text-ink font-mono">{vault.kdfIterations || '100,000'}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-sm font-medium text-muted">Total Entries:</span>
-                      <span className="text-sm text-ink">{vault.entries.length}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-                    <Clock size={20} className="text-accent" />
-                    Timeout Settings
-                  </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-muted mb-2">
-                        Auto-lock after idle (minutes)
-                      </label>
-                      <input
-                        type="number"
-                        min="1"
-                        max="60"
-                        value={localSettings.idleTimeout / 60000}
-                        onChange={(e) => setLocalSettings({
-                          ...localSettings,
-                          idleTimeout: parseInt(e.target.value) * 60000
-                        })}
-                        className="ai-input"
-                      />
-                      <p className="text-xs text-muted mt-1">Vault will lock automatically after this period of inactivity</p>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-muted mb-2">
-                        Clear clipboard after (seconds)
-                      </label>
-                      <input
-                        type="number"
-                        min="5"
-                        max="300"
-                        value={localSettings.clipboardTimeout / 1000}
-                        onChange={(e) => setLocalSettings({
-                          ...localSettings,
-                          clipboardTimeout: parseInt(e.target.value) * 1000
-                        })}
-                        className="ai-input"
-                      />
-                      <p className="text-xs text-muted mt-1">Copied passwords will be cleared from clipboard after this time</p>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-                    <Shield size={20} className="text-accent" />
-                    Security Options
-                  </h3>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-4 bg-surface2 rounded-xl border border-line">
-                      <div>
-                        <label className="text-sm font-medium text-ink">
-                          Lock on Tab Close
-                        </label>
-                        <p className="text-xs text-muted mt-1">Automatically lock vault when browser tab is closed</p>
-                      </div>
-                      <button
-                        onClick={() => setLocalSettings({
-                          ...localSettings,
-                          lockOnTabClose: !localSettings.lockOnTabClose
-                        })}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          localSettings.lockOnTabClose ? 'bg-accent' : 'bg-line'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            localSettings.lockOnTabClose ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-surface2 rounded-xl border border-line">
-                      <div>
-                        <label className="text-sm font-medium text-ink">
-                          Lock on Minimize
-                        </label>
-                        <p className="text-xs text-muted mt-1">Lock vault when window is minimized or hidden</p>
-                      </div>
-                      <button
-                        onClick={() => setLocalSettings({
-                          ...localSettings,
-                          autoLockOnMinimize: !localSettings.autoLockOnMinimize
-                        })}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          localSettings.autoLockOnMinimize ? 'bg-accent' : 'bg-line'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            localSettings.autoLockOnMinimize ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-surface2 rounded-xl border border-line">
-                      <div>
-                        <label className="text-sm font-medium text-ink">
-                          Clear Clipboard on Lock
-                        </label>
-                        <p className="text-xs text-muted mt-1">Clear clipboard immediately when vault is locked</p>
-                      </div>
-                      <button
-                        onClick={() => setLocalSettings({
-                          ...localSettings,
-                          clearClipboardOnLock: !localSettings.clearClipboardOnLock
-                        })}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          localSettings.clearClipboardOnLock ? 'bg-accent' : 'bg-line'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            localSettings.clearClipboardOnLock ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    <div className="flex items-center justify-between p-4 bg-surface2 rounded-xl border border-line">
-                      <div>
-                        <label className="text-sm font-medium text-ink">
-                          Allow Screenshots
-                        </label>
-                        <p className="text-xs text-muted mt-1">When disabled, prevents screenshots on supported devices</p>
-                      </div>
-                      <button
-                        onClick={() => setLocalSettings({
-                          ...localSettings,
-                          allowScreenshots: !localSettings.allowScreenshots
-                        })}
-                        className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                          localSettings.allowScreenshots ? 'bg-accent' : 'bg-line'
-                        }`}
-                      >
-                        <span
-                          className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                            localSettings.allowScreenshots ? 'translate-x-6' : 'translate-x-1'
-                          }`}
-                        />
-                      </button>
-                    </div>
-
-                    <button
-                      onClick={handleSaveSettings}
-                      className="btn-primary w-full"
-                    >
-                      Save Settings
-                    </button>
-                  </div>
-                </div>
+          <SettingsCard
+            title="Recovery phrase"
+            description="Your 12 words reset a forgotten master password. Generating a new phrase makes the old one stop working."
+            action={
+              !showRecoveryFlow && (
+                <button onClick={handleRegenerateRecoveryPhrase} className="btn-ghost !px-3.5 !py-2 text-sm gap-2">
+                  <KeyRound size={15} />
+                  New phrase
+                </button>
+              )
+            }
+          >
+            {showRecoveryFlow && (
+              <div className="px-5 py-4">
+                <RegenerateRecoveryFlow
+                  recoveryPhrase={pendingRecoveryPhrase}
+                  onVerified={handleRecoveryPhraseVerified}
+                  onCancel={() => {
+                    setShowRecoveryFlow(false);
+                    setPendingRecoveryPhrase('');
+                  }}
+                />
               </div>
             )}
+          </SettingsCard>
 
-            {activeTab === 'security' && !showRecoveryFlow && (
-              <div className="space-y-6">
-                {securityMetrics && (
-                  <div className="bg-surface2 border border-line rounded-xl p-6">
-                    <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-                      <Lock size={20} className="text-accent" />
-                      Vault Security Analysis
-                    </h3>
-
-                    <div className="grid grid-cols-2 gap-4 mb-6">
-                      <div className="bg-surface rounded-lg p-4">
-                        <div className="text-sm text-muted mb-1">Security Level</div>
-                        <div className="text-lg font-bold text-success">{securityMetrics.securityLevel}</div>
-                      </div>
-                      <div className="bg-surface rounded-lg p-4">
-                        <div className="text-sm text-muted mb-1">Key Strength</div>
-                        <div className="text-lg font-bold text-accent">{securityMetrics.keyStrength}-bit AES</div>
-                      </div>
-                    </div>
-
-                    <div className="bg-accent/10 border border-accent/20 rounded-lg p-4 mb-4">
-                      <div className="flex items-start gap-3">
-                        <Zap className="text-accent mt-0.5 flex-shrink-0" size={20} />
-                        <div>
-                          <div className="text-sm font-semibold text-accent mb-1">
-                            Estimated Brute-Force Time
-                          </div>
-                          <div className="text-2xl font-bold text-ink mb-2">
-                            {securityMetrics.estimatedDecryptionTime}
-                          </div>
-                          <div className="text-xs text-muted">
-                            Time required to break encryption using modern hardware (1 billion attempts/second)
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="bg-surface rounded-lg p-4">
-                      <div className="text-sm font-semibold text-ink mb-3">Active Protections</div>
-                      <div className="grid grid-cols-1 gap-2">
-                        {securityMetrics.protections.map((protection: string, idx: number) => (
-                          <div key={idx} className="flex items-center gap-2 text-sm text-muted">
-                            <Check size={16} className="text-success flex-shrink-0" />
-                            <span>{protection}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    <div className="mt-4 bg-surface border border-line rounded-lg p-4">
-                      <div className="text-sm font-semibold text-ink mb-2">Device Binding Active</div>
-                      <div className="grid grid-cols-3 gap-3 text-xs">
-                        <div>
-                          <div className="text-muted mb-1">Browser</div>
-                          <div className="text-ink font-medium">{deviceInfo.browser}</div>
-                        </div>
-                        <div>
-                          <div className="text-muted mb-1">OS</div>
-                          <div className="text-ink font-medium">{deviceInfo.os}</div>
-                        </div>
-                        <div>
-                          <div className="text-muted mb-1">Device Type</div>
-                          <div className="text-ink font-medium">{deviceInfo.deviceType}</div>
-                        </div>
-                      </div>
-                      <div className="mt-3 text-xs text-muted">
-                        <Shield size={14} className="inline mr-1" />
-                        This vault is cryptographically bound to your device. Even with the master password, it cannot be opened on a different system without additional verification.
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                <BiometricSetup username="vault-user" onComplete={onBiometricSetupComplete} />
-
-                <div className="border-t border-line pt-6">
-                  <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-                    <Key size={20} className="text-accent" />
-                    Change Master Password
-                  </h3>
-                  <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-medium text-muted mb-1">
-                        Current Password
-                      </label>
-                      <input
-                        type="password"
-                        value={oldPassword}
-                        onChange={(e) => setOldPassword(e.target.value)}
-                        className="ai-input"
-                        placeholder="Enter current password"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-muted mb-1">
-                        New Password
-                      </label>
-                      <input
-                        type="password"
-                        value={newPassword}
-                        onChange={(e) => setNewPassword(e.target.value)}
-                        className="ai-input"
-                        placeholder="Enter new password"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-muted mb-1">
-                        Confirm New Password
-                      </label>
-                      <input
-                        type="password"
-                        value={confirmPassword}
-                        onChange={(e) => setConfirmPassword(e.target.value)}
-                        className="ai-input"
-                        placeholder="Confirm new password"
-                      />
-                    </div>
-
-                    <button
-                      onClick={handleChangePassword}
-                      disabled={!oldPassword || !newPassword || !confirmPassword}
-                      className="btn-primary w-full disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Change Password
-                    </button>
-                  </div>
-                </div>
-
-                <div className="border-t border-line pt-6">
-                  <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-                    <Shield size={20} className="text-accent" />
-                    Recovery Phrase
-                  </h3>
-                  <div className="bg-accent/10 border border-accent/20 rounded-xl p-4 mb-4">
-                    <div className="flex gap-3">
-                      <AlertTriangle className="text-accent flex-shrink-0" size={20} />
-                      <div className="text-sm text-muted">
-                        <p className="font-semibold mb-1 text-ink">Warning</p>
-                        <p>Regenerating your recovery phrase will invalidate the old one. Make sure to save the new phrase securely.</p>
-                      </div>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleRegenerateRecoveryPhrase}
-                    className="w-full px-4 py-3 border-2 border-accent/40 text-accent hover:bg-accent/10 rounded-lg transition-all duration-200 font-medium flex items-center justify-center gap-2"
-                  >
-                    <Key size={18} />
-                    Regenerate Recovery Phrase
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'backup' && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-                    <Download size={20} className="text-accent" />
-                    Export Encrypted Backup
-                  </h3>
-                  <div className="bg-surface2 border border-line rounded-xl p-4 mb-4">
-                    <p className="text-sm text-muted mb-2">
-                      Export your vault as an encrypted backup file. This file can be stored on USB drives, cloud storage, or anywhere safe.
-                    </p>
-                    <ul className="text-sm text-muted space-y-1 list-disc list-inside">
-                      <li>Fully encrypted with your master password</li>
-                      <li>Can be restored on any device</li>
-                      <li>Includes all passwords and settings</li>
-                    </ul>
-                  </div>
-                  <button
-                    onClick={onExportBackup}
-                    className="btn-primary w-full gap-2"
-                  >
-                    <Download size={18} />
-                    Export Encrypted Backup
-                  </button>
-                </div>
-
-                <div className="border-t border-line pt-6">
-                  <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-                    <FileDown size={20} className="text-accent" />
-                    Export Unencrypted Data
-                  </h3>
-                  <div className="bg-accent/10 border border-accent/20 rounded-xl p-4 mb-4">
-                    <div className="flex items-start gap-3">
-                      <AlertTriangle className="text-accent flex-shrink-0 mt-0.5" size={20} />
-                      <div className="text-sm text-muted">
-                        <p className="font-semibold mb-1 text-ink">Security Warning</p>
-                        <p>These exports contain unencrypted passwords. Store them securely and delete after use.</p>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      onClick={handleExportCSV}
-                      className="btn-ghost gap-2"
-                    >
-                      <FileDown size={18} />
-                      Export CSV
-                    </button>
-                    <button
-                      onClick={handleExportJSON}
-                      className="btn-ghost gap-2"
-                    >
-                      <FileDown size={18} />
-                      Export JSON
-                    </button>
-                  </div>
-                </div>
-
-                <div className="border-t border-line pt-6">
-                  <h3 className="text-lg font-semibold text-ink mb-4">Backup Information</h3>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between p-3 bg-surface2 rounded-lg">
-                      <span className="text-sm text-muted">Last backup:</span>
-                      <span className="text-sm font-medium text-ink">
-                        {vault.lastBackup ? new Date(vault.lastBackup).toLocaleString() : 'Never'}
-                      </span>
-                    </div>
-                    {!vault.lastBackup && (
-                      <div className="bg-accent/10 border border-accent/20 rounded-lg p-3">
-                        <p className="text-sm text-muted">
-                          <strong className="text-ink">Tip:</strong> Regular backups are recommended. Export your vault to a USB drive or secure location.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'security' && showRecoveryFlow && (
-              <div className="space-y-6">
-                <div>
-                  <h3 className="text-lg font-semibold text-ink mb-4 flex items-center gap-2">
-                    <Shield size={20} className="text-accent" />
-                    Regenerate Recovery Phrase
-                  </h3>
-                  <RegenerateRecoveryFlow
-                    recoveryPhrase={pendingRecoveryPhrase}
-                    onVerified={handleRecoveryPhraseVerified}
-                    onCancel={() => {
-                      setShowRecoveryFlow(false);
-                      setPendingRecoveryPhrase('');
-                    }}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+          <GuardianRecoverySettings vault={vault} onSave={onSaveGuardianRecovery} />
         </div>
-      </div>
+      )}
+
+      {activeTab === 'backup' && (
+        <div className="space-y-5">
+          <SettingsCard title="Encrypted backup" description="A copy of the whole vault, locked with your master password and Secret Key. Safe to keep on a USB drive or cloud storage.">
+            <SettingRow title="Download backup" description={`Last backup: ${formatDateTime(vault.lastBackup)}`}>
+              <button onClick={onExportBackup} className="btn-primary !px-4 !py-2 text-sm gap-2">
+                <Download size={15} />
+                Download
+              </button>
+            </SettingRow>
+          </SettingsCard>
+
+          <SettingsCard
+            title="Export unencrypted"
+            tone="danger"
+            description="These files contain your passwords in plain text. Use them to move to another manager, then delete them."
+          >
+            <SettingRow title="CSV" description="Works with most password managers and spreadsheets.">
+              <button onClick={() => download(exportToCSV(vault.entries), 'text/csv', 'csv')} className="btn-ghost !px-4 !py-2 text-sm gap-2">
+                <FileDown size={15} />
+                Export CSV
+              </button>
+            </SettingRow>
+            <SettingRow title="JSON" description="Keeps every field, for scripts and re-import.">
+              <button onClick={() => download(exportToJSON(vault.entries), 'application/json', 'json')} className="btn-ghost !px-4 !py-2 text-sm gap-2">
+                <FileDown size={15} />
+                Export JSON
+              </button>
+            </SettingRow>
+          </SettingsCard>
+        </div>
+      )}
+
+      <StatusToast kind="success" message={success} />
+      <StatusToast kind="error" message={error} />
+    </div>
   );
 }

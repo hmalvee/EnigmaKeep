@@ -1,5 +1,3 @@
-import { Tag, X } from 'lucide-react';
-
 interface CategoryFilterProps {
   categories: string[];
   selectedCategory: string | null;
@@ -19,55 +17,31 @@ const CATEGORY_COLORS: { [key: string]: string } = {
 };
 
 export function CategoryFilter({ categories, selectedCategory, onSelectCategory }: CategoryFilterProps) {
-  const getCategoryStyle = (category: string) => {
-    return CATEGORY_COLORS[category] || CATEGORY_COLORS['Other'];
-  };
-
   if (categories.length === 0) {
     return null;
   }
 
-  return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <div className="flex items-center gap-2 text-muted text-sm">
-        <Tag size={16} />
-        <span>Categories:</span>
-      </div>
+  const pill = (active: boolean) =>
+    `shrink-0 rounded-full border px-3 py-1 text-[13px] font-medium transition-colors ${
+      active ? 'border-ink/20 bg-ink/10 text-ink' : 'border-transparent text-muted hover:bg-ink/5 hover:text-ink'
+    }`;
 
-      <button
-        onClick={() => onSelectCategory(null)}
-        className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 ${
-          selectedCategory === null
-            ? 'bg-accent/10 text-accent border border-accent/20'
-            : 'bg-surface2 text-muted border border-line hover:border-accent/40'
-        }`}
-      >
+  return (
+    <div className="-mx-1 flex items-center gap-1 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Filter by category">
+      <button role="tab" aria-selected={selectedCategory === null} onClick={() => onSelectCategory(null)} className={pill(selectedCategory === null)}>
         All
       </button>
-
       {categories.map(category => (
         <button
           key={category}
-          onClick={() => onSelectCategory(category)}
-          className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 border ${
-            selectedCategory === category
-              ? getCategoryStyle(category)
-              : 'bg-surface2 text-muted border-line hover:border-accent/40'
-          }`}
+          role="tab"
+          aria-selected={selectedCategory === category}
+          onClick={() => onSelectCategory(selectedCategory === category ? null : category)}
+          className={pill(selectedCategory === category)}
         >
           {category}
         </button>
       ))}
-
-      {selectedCategory && (
-        <button
-          onClick={() => onSelectCategory(null)}
-          className="p-1.5 text-muted hover:text-ink hover:bg-surface2 rounded-lg transition-colors"
-          title="Clear filter"
-        >
-          <X size={16} />
-        </button>
-      )}
     </div>
   );
 }

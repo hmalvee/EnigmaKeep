@@ -1,7 +1,8 @@
 {
   "name": "enigmakeep",
   "private": true,
-  "version": "1.0.0",
+  "license": "AGPL-3.0-or-later",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,13 +14,16 @@
   "dependencies": {
     "bip39": "^3.1.0",
     "buffer": "^6.0.3",
+    "jsqr": "^1.4.0",
     "lucide-react": "^0.344.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-markdown": "^9.0.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.9.1",
+    "@types/qrcode": "^1.5.5",
     "@types/react": "^18.3.5",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react": "^4.3.1",

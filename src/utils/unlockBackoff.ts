@@ -1,11 +1,14 @@
 /**
  * Client-side exponential backoff after failed unlock attempts.
  * Offline-only slowdown against casual password stuffing on a stolen device.
+ * The counter lives in localStorage so that opening a new tab does not reset it.
  */
 
 const STORAGE_KEY = 'enigmakeep_unlock_failures';
 const MAX_DELAY_MS = 30_000;
 const BASE_DELAY_MS = 500;
+/** Forget old failures after this long without a new one. */
+const FORGET_AFTER_MS = 60 * 60 * 1000;
 
 interface FailureState {
   count: number;
@@ -14,10 +17,13 @@ interface FailureState {
 
 function readState(): FailureState {
   try {
-    const raw = sessionStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { count: 0, lastAt: 0 };
     const parsed = JSON.parse(raw) as FailureState;
     if (typeof parsed.count !== 'number' || typeof parsed.lastAt !== 'number') {
+      return { count: 0, lastAt: 0 };
+    }
+    if (Date.now() - parsed.lastAt > FORGET_AFTER_MS) {
       return { count: 0, lastAt: 0 };
     }
     return parsed;
@@ -28,7 +34,7 @@ function readState(): FailureState {
 
 function writeState(state: FailureState): void {
   try {
-    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   } catch {
     /* ignore quota / private mode */
   }
@@ -52,7 +58,7 @@ export function recordUnlockFailure(): void {
 
 export function clearUnlockFailures(): void {
   try {
-    sessionStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(STORAGE_KEY);
   } catch {
     /* ignore */
   }

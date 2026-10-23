@@ -124,19 +124,19 @@ export function calculatePasswordStrength(password: string): PasswordStrength {
 
   if (score < 1.5) {
     label = 'Very Weak';
-    color = 'text-red-500';
+    color = 'text-danger';
   } else if (score < 2.5) {
     label = 'Weak';
-    color = 'text-orange-500';
+    color = 'text-warn';
   } else if (score < 3.5) {
     label = 'Fair';
-    color = 'text-yellow-500';
+    color = 'text-warn';
   } else if (score < 4) {
     label = 'Good';
-    color = 'text-blue-500';
+    color = 'text-accent';
   } else {
     label = 'Strong';
-    color = 'text-green-500';
+    color = 'text-success';
   }
 
   // Check if meets minimum requirements
@@ -164,9 +164,9 @@ export function calculatePasswordStrength(password: string): PasswordStrength {
 }
 
 export function getPasswordStrengthBarColor(score: number): string {
-  if (score < 1.5) return 'bg-red-500';
-  if (score < 2.5) return 'bg-orange-500';
-  if (score < 3.5) return 'bg-yellow-500';
-  if (score < 4) return 'bg-blue-500';
-  return 'bg-green-500';
+  if (score < 1.5) return 'bg-danger';
+  if (score < 2.5) return 'bg-warn/70';
+  if (score < 3.5) return 'bg-warn';
+  if (score < 4) return 'bg-accent';
+  return 'bg-success';
 }

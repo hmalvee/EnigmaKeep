@@ -1,15 +1,43 @@
-export interface PasswordStrength {
-  score: number;
-  label: string;
-  color: string;
-}
-
 export interface PasswordOptions {
   length?: number;
   uppercase?: boolean;
   lowercase?: boolean;
   numbers?: boolean;
   symbols?: boolean;
+}
+
+const UPPERCASE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const LOWERCASE = 'abcdefghijklmnopqrstuvwxyz';
+const NUMBERS = '0123456789';
+const SYMBOLS = '!@#$%^&*()_+-=[]{}|;:,.<>?';
+
+/**
+ * Uniform random integer in [0, max) from the system CSPRNG.
+ * Rejection sampling avoids the modulo bias of `random % max`.
+ */
+function randomIndex(max: number): number {
+  if (!Number.isInteger(max) || max <= 0 || max > 0x100000000) {
+    throw new RangeError('randomIndex: max out of range');
+  }
+  const limit = Math.floor(0x100000000 / max) * max;
+  const buf = new Uint32Array(1);
+  for (;;) {
+    crypto.getRandomValues(buf);
+    if (buf[0] < limit) return buf[0] % max;
+  }
+}
+
+function pick(alphabet: string): string {
+  return alphabet[randomIndex(alphabet.length)];
+}
+
+/** Fisher–Yates with CSPRNG indices; the sort-by-random trick is biased. */
+function shuffle<T>(items: T[]): T[] {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = randomIndex(i + 1);
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
 }
 
 export function generatePassword(options: PasswordOptions = {}): string {
@@ -21,65 +49,19 @@ export function generatePassword(options: PasswordOptions = {}): string {
     symbols = true
   } = options;
 
-  const uppercaseChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-  const lowercaseChars = 'abcdefghijklmnopqrstuvwxyz';
-  const numberChars = '0123456789';
-  const symbolChars = '!@#$%^&*()_+-=[]{}|;:,.<>?';
+  const alphabets: string[] = [];
+  if (uppercase) alphabets.push(UPPERCASE);
+  if (lowercase) alphabets.push(LOWERCASE);
+  if (numbers) alphabets.push(NUMBERS);
+  if (symbols) alphabets.push(SYMBOLS);
+  if (alphabets.length === 0) alphabets.push(LOWERCASE, NUMBERS);
 
-  let allChars = '';
-  const guaranteedChars: string[] = [];
+  const allChars = alphabets.join('');
+  const targetLength = Math.max(Math.floor(length), alphabets.length);
 
-  if (uppercase) {
-    allChars += uppercaseChars;
-    guaranteedChars.push(uppercaseChars[Math.floor(Math.random() * uppercaseChars.length)]);
-  }
-  if (lowercase) {
-    allChars += lowercaseChars;
-    guaranteedChars.push(lowercaseChars[Math.floor(Math.random() * lowercaseChars.length)]);
-  }
-  if (numbers) {
-    allChars += numberChars;
-    guaranteedChars.push(numberChars[Math.floor(Math.random() * numberChars.length)]);
-  }
-  if (symbols) {
-    allChars += symbolChars;
-    guaranteedChars.push(symbolChars[Math.floor(Math.random() * symbolChars.length)]);
-  }
+  // One character from each selected class, then fill the rest uniformly.
+  const chars = alphabets.map(pick);
+  while (chars.length < targetLength) chars.push(pick(allChars));
 
-  if (allChars.length === 0) {
-    allChars = lowercaseChars + numberChars;
-    guaranteedChars.push(lowercaseChars[0]);
-    guaranteedChars.push(numberChars[0]);
-  }
-
-  let password = guaranteedChars.join('');
-
-  for (let i = password.length; i < length; i++) {
-    password += allChars[Math.floor(Math.random() * allChars.length)];
-  }
-
-  return password.split('').sort(() => Math.random() - 0.5).join('');
-}
-
-export function calculatePasswordStrength(password: string): PasswordStrength {
-  let score = 0;
-
-  if (password.length >= 8) score++;
-  if (password.length >= 12) score++;
-  if (password.length >= 16) score++;
-
-  if (/[a-z]/.test(password)) score++;
-  if (/[A-Z]/.test(password)) score++;
-  if (/[0-9]/.test(password)) score++;
-  if (/[^a-zA-Z0-9]/.test(password)) score++;
-
-  if (score <= 2) {
-    return { score, label: 'Weak', color: 'text-red-400' };
-  } else if (score <= 4) {
-    return { score, label: 'Fair', color: 'text-yellow-400' };
-  } else if (score <= 5) {
-    return { score, label: 'Good', color: 'text-blue-400' };
-  } else {
-    return { score, label: 'Strong', color: 'text-emerald-400' };
-  }
+  return shuffle(chars).join('');
 }

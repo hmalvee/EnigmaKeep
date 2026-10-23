@@ -212,9 +212,9 @@ export function EntryModal({ entry, onSave, onClose }: Props) {
                       passwordStrength.score < 1.5
                         ? 'bg-danger w-1/4'
                         : passwordStrength.score < 2.5
-                          ? 'bg-orange-400 w-2/4'
+                          ? 'bg-warn/70 w-2/4'
                           : passwordStrength.score < 3.5
-                            ? 'bg-yellow-400 w-3/4'
+                            ? 'bg-warn w-3/4'
                             : 'bg-success w-full'
                     }`}
                   />

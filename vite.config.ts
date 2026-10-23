@@ -1,11 +1,44 @@
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
+
+// Strict CSP for production builds only: the dev server relies on inline
+// scripts (React refresh), so the policy is not applied there.
+const PRODUCTION_CSP = [
+  "default-src 'self'",
+  "script-src 'self'",
+  // Fonts are self-hosted; no third-party style/font origins.
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self' data:",
+  "img-src 'self' data: blob:",
+  // Landing-page hero video (the vault itself loads nothing remote)
+  "media-src 'self' https://d8j0ntlcm91z4.cloudfront.net",
+  "connect-src 'self'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "worker-src 'self'",
+  "manifest-src 'self'"
+].join('; ');
+
+function productionCsp(): Plugin {
+  return {
+    name: 'production-csp',
+    apply: 'build',
+    transformIndexHtml(html) {
+      return html.replace(
+        '<meta charset="UTF-8" />',
+        `<meta charset="UTF-8" />\n    <meta http-equiv="Content-Security-Policy" content="${PRODUCTION_CSP}" />`
+      );
+    }
+  };
+}
 
 // https://vitejs.dev/config/
 export default defineConfig({
   plugins: [
     react(),
+    productionCsp(),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'robots.txt', 'icons/*.png'],
@@ -13,8 +46,8 @@ export default defineConfig({
         name: 'EnigmaKeep - Your Digital Fortress',
         short_name: 'EnigmaKeep',
         description: '100% offline password manager with zero-knowledge encryption and biometric authentication',
-        theme_color: '#7c3aed',
-        background_color: '#0f172a',
+        theme_color: '#01061a',
+        background_color: '#01061a',
         display: 'standalone',
         scope: '/',
         start_url: '/',
@@ -83,21 +116,8 @@ export default defineConfig({
             }
           },
           {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
-          },
-          {
-            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp)$/,
+            // Runtime caches hold same-origin files only.
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\.(?:png|jpg|jpeg|svg|gif|webp)$/.test(url.pathname),
             handler: 'CacheFirst',
             options: {
               cacheName: 'images-cache',
@@ -108,7 +128,7 @@ export default defineConfig({
             }
           },
           {
-            urlPattern: /\.(?:js|css)$/,
+            urlPattern: ({ url, sameOrigin }) => sameOrigin && /\.(?:js|css)$/.test(url.pathname),
             handler: 'StaleWhileRevalidate',
             options: {
               cacheName: 'assets-cache',

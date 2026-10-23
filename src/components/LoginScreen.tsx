@@ -1,22 +1,28 @@
 import { useState, useEffect } from 'react';
-import { Upload, Key, Loader, AlertCircle, Fingerprint, RefreshCw } from 'lucide-react';
-import { isBiometricEnabled, checkBiometricSupport, authenticateWithBiometric } from '../utils/biometric';
+import { Upload, Key, Loader, AlertCircle, Fingerprint, RefreshCw, QrCode, Users, ArrowLeft, ChevronRight, Lock } from 'lucide-react';
+import { isBiometricEnabled, checkBiometricSupport, unlockWithBiometric } from '../utils/biometric';
 import { PasswordStrengthMeter } from './PasswordStrengthMeter';
 import { calculatePasswordStrength } from '../utils/passwordStrength';
 import { getLastVaultHandle, verifyHandleAccess } from '../utils/vaultStorage';
 import { getUnlockDelayMs, getUnlockFailureCount } from '../utils/unlockBackoff';
 import { listVaultSnapshots, snapshotToFile, type VaultSnapshot } from '../utils/vaultSnapshots';
+import { SecretKeyScanner } from './SecretKeyScanner';
+import { GuardianRecoveryFlow } from './GuardianRecoveryFlow';
+import type { VaultData } from '../types/vault';
+import type { FileLayout } from '../utils/sessionFile';
 
 interface Props {
-  onLogin: (password: string, file: File, handle: FileSystemFileHandle | null) => Promise<void>;
+  /** `secretKey`: typed/scanned Secret Key, when this device doesn't have it yet. */
+  onLogin: (password: string, file: File, handle: FileSystemFileHandle | null, secretKey?: string) => Promise<void>;
   onRecoverWithSeedPhrase: (seedPhrase: string, newPassword: string, file: File, handle: FileSystemFileHandle | null) => Promise<void>;
-  onBiometricLogin: () => Promise<void>;
+  onBiometricLogin: (password: string) => Promise<void>;
+  onRecoverWithGuardians: (vault: VaultData, newPassword: string, file: File, handle: FileSystemFileHandle | null, layout: FileLayout) => Promise<void>;
   lastVaultPath: string | null;
   error: string;
 }
 
-export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin, lastVaultPath, error }: Props) {
-  const [mode, setMode] = useState<'password' | 'recovery'>('password');
+export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin, onRecoverWithGuardians, lastVaultPath, error }: Props) {
+  const [mode, setMode] = useState<'password' | 'forgot' | 'recovery' | 'guardians'>('password');
   const [password, setPassword] = useState('');
   const [seedPhrase, setSeedPhrase] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -32,6 +38,10 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
   const [snapshots, setSnapshots] = useState<VaultSnapshot[]>([]);
   const [showSnapshots, setShowSnapshots] = useState(false);
   const [usingSnapshot, setUsingSnapshot] = useState(false);
+  const [showSecretKeyInput, setShowSecretKeyInput] = useState(false);
+  const [secretKeyInput, setSecretKeyInput] = useState('');
+  const [isScanning, setIsScanning] = useState(false);
+  const [autoLoaded, setAutoLoaded] = useState(false);
 
   useEffect(() => {
     const checkBiometric = async () => {
@@ -65,6 +75,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
         const file = await handle.getFile();
         setSelectedFile(file);
         setSelectedHandle(handle);
+        setAutoLoaded(true);
         setAutoLoadError(null);
       } catch (err: any) {
         console.error('Auto-load failed:', err);
@@ -82,6 +93,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
     setSelectedFile(snapshotToFile(snapshot));
     setSelectedHandle(null);
     setUsingSnapshot(true);
+    setAutoLoaded(false);
     setShowSnapshots(false);
     setAutoLoadError(null);
   };
@@ -94,7 +106,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
         <button
           type="button"
           onClick={() => setShowSnapshots(v => !v)}
-          className="text-xs text-gray-400 hover:text-neon-cyan transition-colors"
+          className="text-xs text-muted hover:text-neon-cyan transition-colors"
         >
           Vault file damaged? Restore from local backup ({snapshots.length})
         </button>
@@ -108,8 +120,8 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
                 onClick={() => handleSelectSnapshot(snapshot)}
                 className="w-full text-left px-3 py-2 rounded-lg hover:bg-vault-surface transition-colors"
               >
-                <span className="block text-xs text-gray-200">{snapshot.name}</span>
-                <span className="block text-[11px] text-gray-500">
+                <span className="block text-xs text-ink/90">{snapshot.name}</span>
+                <span className="block text-[11px] text-muted/80">
                   {new Date(snapshot.createdAt).toLocaleString()}
                 </span>
               </button>
@@ -118,7 +130,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
         )}
 
         {usingSnapshot && (
-          <p className="text-xs text-amber-400 mt-1">
+          <p className="text-xs text-warn mt-1">
             Using a local backup. After unlocking, use Save to write a fresh vault file.
           </p>
         )}
@@ -129,7 +141,9 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
   const handleFileSelect = async () => {
     try {
       if ('showOpenFilePicker' in window) {
-        const [handle] = await window.showOpenFilePicker({
+        const [handle] = await (window as unknown as {
+          showOpenFilePicker: (o: object) => Promise<FileSystemFileHandle[]>;
+        }).showOpenFilePicker({
           types: [{
             description: 'Vault File',
             accept: { 'application/octet-stream': ['.dat', '.enc'], 'text/plain': ['.txt'] }
@@ -138,6 +152,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
         const file = await handle.getFile();
         setSelectedFile(file);
         setSelectedHandle(handle);
+        setAutoLoaded(false);
       } else {
         const input = document.createElement('input');
         input.type = 'file';
@@ -147,6 +162,7 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
           if (file) {
             setSelectedFile(file);
             setSelectedHandle(null);
+            setAutoLoaded(false);
           }
         };
         input.click();
@@ -159,20 +175,24 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
   };
 
   const handlePasswordLogin = async () => {
-    if (!password || !selectedFile) return;
+    // Enter on the inputs can fire while an attempt is running; parallel
+    // attempts would all skip the backoff delay.
+    if (isLoading || !password || !selectedFile) return;
 
     setIsLoading(true);
     try {
-      await onLogin(password, selectedFile, selectedHandle);
+      await onLogin(password, selectedFile, selectedHandle, secretKeyInput.trim() || undefined);
     } catch (err) {
       console.error('Login failed:', err);
+      // Wrong password and a missing Secret Key look the same; point to the latter.
+      setShowSecretKeyInput(true);
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleRecoveryLogin = async () => {
-    if (!seedPhrase || !newPassword || !confirmPassword || !selectedFile) return;
+    if (isLoading || !seedPhrase || !newPassword || !confirmPassword || !selectedFile) return;
 
     if (newPassword !== confirmPassword) {
       return;
@@ -190,208 +210,148 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
   };
 
   const handleBiometricAuth = async () => {
+    if (isBiometricLoading || isLoading) return;
     setIsBiometricLoading(true);
     try {
-      const success = await authenticateWithBiometric('vault-user');
-      if (success) {
-        await onBiometricLogin();
-      }
-    } catch (err) {
+      const unlockedPassword = await unlockWithBiometric();
+      await onBiometricLogin(unlockedPassword);
+    } catch (err: any) {
       console.error('Biometric auth failed:', err);
+      setAutoLoadError(err?.message || 'Biometric unlock failed. Please use your master password.');
     } finally {
       setIsBiometricLoading(false);
     }
   };
 
-  return (
-    <div className="w-full max-w-md">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-white mb-2 tracking-tight">Open Existing Vault</h2>
-        <p className="text-gray-400">Unlock your encrypted password vault</p>
-      </div>
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-xl text-red-400 text-sm animate-slideIn backdrop-blur-sm">
-          {error}
-        </div>
+  const renderFilePicker = () => (
+    <div>
+      <label className="block text-sm font-medium text-ink/80 mb-2">Vault file</label>
+      <button
+        onClick={handleFileSelect}
+        disabled={isAutoLoading}
+        className="w-full px-4 py-3 border border-dashed border-line hover:border-focus/50 rounded-lg transition-all duration-300 flex items-center justify-center gap-2 text-ink/80 hover:text-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed bg-vault-dark/50"
+      >
+        {isAutoLoading ? (
+          <>
+            <Loader size={20} className="animate-spin" />
+            Loading last vault...
+          </>
+        ) : (
+          <>
+            <Upload size={20} />
+            <span className="truncate">{selectedFile ? selectedFile.name : 'Select vault file'}</span>
+          </>
+        )}
+      </button>
+      {lastVaultPath && !selectedFile && !isAutoLoading && (
+        <p className="text-xs text-muted/80 mt-1">Last used: {lastVaultPath}</p>
       )}
-
-      {getUnlockFailureCount() > 0 && (
-        <div className="mb-4 p-3 bg-amber-500/10 border border-amber-500/30 rounded-xl text-amber-300 text-sm">
-          Unlock delayed by {Math.ceil(getUnlockDelayMs() / 1000)}s after failed attempts (anti-brute-force).
-        </div>
+      {selectedFile && autoLoaded && (
+        <p className="text-xs text-success mt-1 flex items-center gap-1">
+          <RefreshCw size={12} />
+          Opened your last vault file
+        </p>
       )}
+      {autoLoadError && (
+        <p className="text-xs text-warn mt-1 flex items-center gap-1">
+          <AlertCircle size={12} />
+          {autoLoadError}
+        </p>
+      )}
+      {renderSnapshotRestore()}
+    </div>
+  );
 
-      <div className="flex gap-2 mb-6 bg-vault-surface rounded-xl p-1 border border-vault-border">
-        <button
-          onClick={() => setMode('password')}
-          className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all duration-300 ${
-            mode === 'password'
-              ? 'bg-gradient-to-r from-neon-cyan to-neon-blue text-white shadow-neon-cyan'
-              : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          Master Password
-        </button>
-        <button
-          onClick={() => setMode('recovery')}
-          className={`flex-1 py-2.5 px-4 rounded-lg font-medium transition-all duration-300 flex items-center justify-center gap-2 ${
-            mode === 'recovery'
-              ? 'bg-gradient-to-r from-neon-cyan to-neon-blue text-white shadow-neon-cyan'
-              : 'text-gray-400 hover:text-white'
-          }`}
-        >
-          <Key size={16} />
-          Seed Phrase
-        </button>
-      </div>
+  const backTo = (target: 'password' | 'forgot', label: string) => (
+    <button
+      type="button"
+      onClick={() => setMode(target)}
+      className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted hover:text-ink transition-colors"
+    >
+      <ArrowLeft size={16} />
+      {label}
+    </button>
+  );
 
-      {mode === 'password' ? (
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Vault File
-            </label>
-            <button
-              onClick={handleFileSelect}
-              disabled={isAutoLoading}
-              className="w-full px-4 py-3 border-2 border-dashed border-vault-border hover:border-neon-cyan/50 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 text-gray-300 hover:text-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed bg-vault-dark/50"
-            >
-              {isAutoLoading ? (
-                <>
-                  <Loader size={20} className="animate-spin" />
-                  Loading last vault...
-                </>
-              ) : (
-                <>
-                  <Upload size={20} />
-                  {selectedFile ? selectedFile.name : 'Select Vault File'}
-                </>
-              )}
-            </button>
-            {lastVaultPath && !selectedFile && !isAutoLoading && (
-              <p className="text-xs text-gray-500 mt-1">Last used: {lastVaultPath}</p>
-            )}
-            {selectedFile && (
-              <p className="text-xs text-neon-green mt-1 flex items-center gap-1">
-                <RefreshCw size={12} />
-                Vault file loaded automatically
-              </p>
-            )}
-            {autoLoadError && (
-              <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
-                <AlertCircle size={12} />
-                {autoLoadError}
-              </p>
-            )}
-            {renderSnapshotRestore()}
-          </div>
+  const header = (title: string, subtitle: string) => (
+    <div className="text-center mb-8">
+      <h2 className="text-2xl font-bold text-ink mb-2 tracking-tight">{title}</h2>
+      <p className="text-muted">{subtitle}</p>
+    </div>
+  );
 
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Master Password
-            </label>
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handlePasswordLogin()}
-              className="ai-input"
-              placeholder="Enter your master password"
-            />
-          </div>
+  const errorBanner = error && (
+    <div className="mb-4 p-3 bg-danger/10 border border-danger/30 rounded-xl text-danger text-sm animate-slideIn backdrop-blur-sm">
+      {error}
+    </div>
+  );
 
-          <button
-            onClick={handlePasswordLogin}
-            disabled={!password || !selectedFile || isLoading}
-            className="w-full ai-button-primary !py-3 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:transform-none flex items-center justify-center gap-2"
-          >
-            {isLoading ? (
-              <>
-                <Loader size={18} className="animate-spin" />
-                Unlocking...
-              </>
-            ) : (
-              'Unlock Vault'
-            )}
-          </button>
+  if (mode === 'forgot') {
+    const option = (
+      target: 'recovery' | 'guardians',
+      Icon: typeof Key,
+      title: string,
+      description: string
+    ) => (
+      <button
+        type="button"
+        onClick={() => setMode(target)}
+        className="w-full text-left p-4 rounded-xl border border-line hover:border-focus/50 hover:bg-ink/5 transition-all duration-200 flex items-center gap-4 group"
+      >
+        <span className="flex-shrink-0 w-10 h-10 rounded-full bg-accent/10 text-accent flex items-center justify-center">
+          <Icon size={18} />
+        </span>
+        <span className="flex-1">
+          <span className="block font-medium text-ink">{title}</span>
+          <span className="block text-sm text-muted mt-0.5">{description}</span>
+        </span>
+        <ChevronRight size={18} className="text-muted group-hover:text-ink transition-colors" />
+      </button>
+    );
 
-          {showBiometric && (
-            <>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <div className="w-full section-divider"></div>
-                </div>
-                <div className="relative flex justify-center text-sm">
-                  <span className="px-4 bg-vault-card text-gray-500 rounded-full">or</span>
-                </div>
-              </div>
-
-              <button
-                onClick={handleBiometricAuth}
-                disabled={isBiometricLoading}
-                className="w-full px-4 py-3 bg-gradient-to-r from-neon-green to-emerald-600 hover:from-neon-green/90 hover:to-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-300 font-medium shadow-[0_0_20px_rgba(16,185,129,0.2)] hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] flex items-center justify-center gap-2"
-              >
-                {isBiometricLoading ? (
-                  <>
-                    <Loader size={18} className="animate-spin" />
-                    Authenticating...
-                  </>
-                ) : (
-                  <>
-                    <Fingerprint size={18} />
-                    Unlock with Biometric
-                  </>
-                )}
-              </button>
-            </>
-          )}
+    return (
+      <div className="w-full max-w-md">
+        {backTo('password', 'Back to unlock')}
+        {header('Forgot your master password?', 'Choose how you want to get back into your vault')}
+        <div className="space-y-3">
+          {option('recovery', Key, 'Use my recovery phrase', 'Enter the 12 words you saved when you created the vault, then set a new password.')}
+          {option('guardians', Users, 'Ask my guardians', 'Collect enough guardian cards. Recovery opens after the waiting period the owner chose.')}
         </div>
-      ) : (
+        <p className="mt-6 text-xs text-muted/80 text-center">
+          EnigmaKeep never sees your password, so nobody can reset it for you. These are the only ways back in.
+        </p>
+      </div>
+    );
+  }
+
+  if (mode === 'guardians') {
+    return (
+      <div className="w-full max-w-md">
+        {backTo('forgot', 'Other recovery options')}
+        {header('Recover with guardians', "Use your guardians' cards to reopen the vault")}
+        {errorBanner}
+        <GuardianRecoveryFlow onRecovered={onRecoverWithGuardians} />
+      </div>
+    );
+  }
+
+  if (mode === 'recovery') {
+    const strength = newPassword ? calculatePasswordStrength(newPassword) : null;
+    const strongEnough = !!strength && strength.meetsMinimum && !strength.isCommon;
+    return (
+      <div className="w-full max-w-md">
+        {backTo('forgot', 'Other recovery options')}
+        {header('Reset with recovery phrase', 'Enter your 12 words and choose a new master password')}
+        {errorBanner}
         <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Vault File
-            </label>
-            <button
-              onClick={handleFileSelect}
-              disabled={isAutoLoading}
-              className="w-full px-4 py-3 border-2 border-dashed border-vault-border hover:border-neon-cyan/50 rounded-xl transition-all duration-300 flex items-center justify-center gap-2 text-gray-300 hover:text-neon-cyan disabled:opacity-50 disabled:cursor-not-allowed bg-vault-dark/50"
-            >
-              {isAutoLoading ? (
-                <>
-                  <Loader size={20} className="animate-spin" />
-                  Loading last vault...
-                </>
-              ) : (
-                <>
-                  <Upload size={20} />
-                  {selectedFile ? selectedFile.name : 'Select Vault File'}
-                </>
-              )}
-            </button>
-            {lastVaultPath && !selectedFile && !isAutoLoading && (
-              <p className="text-xs text-gray-500 mt-1">Last used: {lastVaultPath}</p>
-            )}
-            {selectedFile && (
-              <p className="text-xs text-neon-green mt-1 flex items-center gap-1">
-                <RefreshCw size={12} />
-                Vault file loaded automatically
-              </p>
-            )}
-            {autoLoadError && (
-              <p className="text-xs text-amber-400 mt-1 flex items-center gap-1">
-                <AlertCircle size={12} />
-                {autoLoadError}
-              </p>
-            )}
-            {renderSnapshotRestore()}
-          </div>
+          <p className="rounded-lg border border-warn/40 bg-warn/10 px-3 py-2 text-xs text-ink/80">
+            This rewrites the vault file under the new password. The current master password and any
+            biometric unlock stop working for it.
+          </p>
+          {renderFilePicker()}
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              12-Word Recovery Phrase
-            </label>
+            <label className="block text-sm font-medium text-ink/80 mb-2">Recovery phrase</label>
             <textarea
               value={seedPhrase}
               onChange={(e) => {
@@ -401,54 +361,46 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
               }}
               rows={3}
               className="ai-input font-mono text-sm resize-none"
-              placeholder="Enter your 12-word recovery phrase..."
+              placeholder="word1 word2 word3 ..."
+              autoComplete="off"
+              spellCheck={false}
             />
-            <p className="text-xs mt-1 text-gray-400">
-              Word count: <span className={phraseWordCount === 12 ? 'text-neon-green font-semibold' : 'text-gray-400'}>{phraseWordCount}</span> / 12
+            <p className="text-xs mt-1 text-muted">
+              <span className={phraseWordCount === 12 ? 'text-success font-semibold' : ''}>{phraseWordCount}</span> of 12 words
             </p>
-            {seedPhrase && phraseWordCount !== 12 && (
-              <p className="text-xs mt-1 text-amber-400">⚠ Recovery phrase should be exactly 12 words</p>
-            )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              New Master Password
-            </label>
+            <label className="block text-sm font-medium text-ink/80 mb-2">New master password</label>
             <input
               type="password"
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               className="ai-input"
-              placeholder="Create new master password"
+              placeholder="Create a new master password"
             />
-            {newPassword && <PasswordStrengthMeter password={newPassword} />}
+            {newPassword && <div className="mt-2"><PasswordStrengthMeter password={newPassword} /></div>}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Confirm New Password
-            </label>
+            <label className="block text-sm font-medium text-ink/80 mb-2">Confirm new password</label>
             <input
               type="password"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleRecoveryLogin()}
               className="ai-input"
-              placeholder="Confirm new password"
+              placeholder="Re-enter the new password"
             />
+            {newPassword && confirmPassword && newPassword !== confirmPassword && (
+              <p className="text-xs text-danger mt-1">Passwords do not match</p>
+            )}
           </div>
-
-          {newPassword && confirmPassword && newPassword !== confirmPassword && (
-            <p className="text-sm text-red-400">Passwords do not match</p>
-          )}
-          {newPassword && calculatePasswordStrength(newPassword).score < 3 && (
-            <p className="text-sm text-amber-400">⚠ Password should be stronger (at least 12 characters with uppercase, lowercase, numbers, and symbols)</p>
-          )}
 
           <button
             onClick={handleRecoveryLogin}
-            disabled={!seedPhrase || !newPassword || !confirmPassword || newPassword !== confirmPassword || calculatePasswordStrength(newPassword).score < 3 || !selectedFile || isLoading}
-            className="w-full px-4 py-3 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 disabled:opacity-40 disabled:cursor-not-allowed text-white rounded-xl transition-all duration-300 font-medium shadow-[0_0_20px_rgba(245,158,11,0.2)] hover:shadow-[0_0_30px_rgba(245,158,11,0.3)] flex items-center justify-center gap-2"
+            disabled={phraseWordCount !== 12 || !strongEnough || newPassword !== confirmPassword || !selectedFile || isLoading}
+            className="w-full btn-primary gap-2"
           >
             {isLoading ? (
               <>
@@ -456,14 +408,155 @@ export function LoginScreen({ onLogin, onRecoverWithSeedPhrase, onBiometricLogin
                 Recovering...
               </>
             ) : (
-              <>
-                <Key size={18} />
-                Recover & Set New Password
-              </>
+              'Reset password and open vault'
             )}
           </button>
         </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full max-w-md">
+      <div className="text-center mb-8">
+        <span className="mx-auto mb-4 w-12 h-12 rounded-full bg-accent/10 text-accent flex items-center justify-center">
+          <Lock size={20} />
+        </span>
+        <h2 className="text-2xl font-bold text-ink mb-2 tracking-tight">Unlock your vault</h2>
+        <p className="text-muted">Choose your vault file and enter your master password</p>
+      </div>
+
+      {errorBanner}
+
+      {getUnlockFailureCount() > 0 && (
+        <div className="mb-4 p-3 bg-warn/10 border border-warn/30 rounded-xl text-warn text-sm">
+          Unlock delayed by {Math.ceil(getUnlockDelayMs() / 1000)}s after failed attempts (anti-brute-force).
+        </div>
       )}
+
+      <div className="space-y-4">
+        {renderFilePicker()}
+
+        <div>
+          <div className="flex items-baseline justify-between mb-2">
+            <label className="block text-sm font-medium text-ink/80">Master password</label>
+            <button
+              type="button"
+              onClick={() => setMode('forgot')}
+              className="text-xs text-muted hover:text-ink underline-offset-4 hover:underline"
+            >
+              Forgot password?
+            </button>
+          </div>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handlePasswordLogin()}
+            className="ai-input"
+            placeholder="Enter your master password"
+            autoFocus
+          />
+        </div>
+
+        {showSecretKeyInput ? (
+          <div>
+            <label className="block text-sm font-medium text-ink/80 mb-2">
+              Secret Key <span className="text-muted/80 font-normal">(from your Emergency Kit)</span>
+            </label>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={secretKeyInput}
+                onChange={(e) => setSecretKeyInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handlePasswordLogin()}
+                className="ai-input font-mono"
+                placeholder="EK1-XXXXX-XXXXX-..."
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                onClick={() => setIsScanning(true)}
+                className="px-3 rounded-xl border border-vault-border text-ink/80 hover:text-neon-cyan hover:border-neon-cyan/50"
+                aria-label="Scan Secret Key QR code"
+                title="Scan QR code"
+              >
+                <QrCode size={20} />
+              </button>
+            </div>
+            <p className="text-xs text-muted/80 mt-1">
+              Needed once per device. This browser will remember it after unlocking.
+            </p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowSecretKeyInput(true)}
+            className="text-xs text-muted hover:text-neon-cyan flex items-center gap-1"
+          >
+            <QrCode size={14} />
+            First time on this device? Enter your Secret Key
+          </button>
+        )}
+
+        {isScanning && (
+          <SecretKeyScanner
+            onDetected={(text) => {
+              setSecretKeyInput(text);
+              setIsScanning(false);
+            }}
+            onClose={() => setIsScanning(false)}
+          />
+        )}
+
+        <button
+          onClick={handlePasswordLogin}
+          disabled={!password || !selectedFile || isLoading}
+          className="w-full btn-primary gap-2"
+        >
+          {isLoading ? (
+            <>
+              <Loader size={18} className="animate-spin" />
+              Unlocking...
+            </>
+          ) : (
+            'Unlock vault'
+          )}
+        </button>
+
+        {showBiometric && (
+          <>
+            <div className="relative">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full section-divider"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-4 bg-surface text-muted/80 rounded-full">or</span>
+              </div>
+            </div>
+
+            <button
+              onClick={handleBiometricAuth}
+              disabled={isBiometricLoading}
+              className="w-full btn-ghost gap-2"
+            >
+              {isBiometricLoading ? (
+                <>
+                  <Loader size={18} className="animate-spin" />
+                  Authenticating...
+                </>
+              ) : (
+                <>
+                  <Fingerprint size={18} />
+                  Unlock with biometrics
+                </>
+              )}
+            </button>
+          </>
+        )}
+      </div>
     </div>
   );
 }

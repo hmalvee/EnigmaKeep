@@ -127,7 +127,7 @@ export function FileExplorer({
 
   return (
     <div
-      className="flex-1 overflow-auto p-6"
+      className="flex-1 overflow-auto px-4 py-5 sm:px-6"
       onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
       onDragLeave={() => setDragOver(false)}
       onDrop={(e) => {
@@ -159,14 +159,14 @@ export function FileExplorer({
 
       {/* Toolbar */}
       <div className="flex flex-wrap items-center gap-2 mb-4">
-        <button onClick={() => setCreating(true)} className="btn-ghost !py-2 !px-3 text-sm flex items-center gap-2">
-          <FolderPlus size={16} /> New Folder
+        <button onClick={() => setCreating(true)} className="btn-ghost !py-2 !px-3 text-sm flex items-center gap-2" title="New folder" aria-label="New folder">
+          <FolderPlus size={16} /> <span className="hidden sm:inline">New Folder</span>
         </button>
-        <button onClick={() => fileInputRef.current?.click()} className="btn-ghost !py-2 !px-3 text-sm flex items-center gap-2">
-          <Upload size={16} /> Upload Files
+        <button onClick={() => fileInputRef.current?.click()} className="btn-ghost !py-2 !px-3 text-sm flex items-center gap-2" title="Upload files" aria-label="Upload files">
+          <Upload size={16} /> <span className="hidden sm:inline">Upload Files</span>
         </button>
-        <button onClick={() => folderInputRef.current?.click()} className="btn-ghost !py-2 !px-3 text-sm flex items-center gap-2">
-          <Folder size={16} /> Upload Folder
+        <button onClick={() => folderInputRef.current?.click()} className="btn-ghost !py-2 !px-3 text-sm flex items-center gap-2" title="Upload folder" aria-label="Upload folder">
+          <Folder size={16} /> <span className="hidden sm:inline">Upload Folder</span>
         </button>
 
         <div className="flex-1" />
@@ -177,7 +177,7 @@ export function FileExplorer({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search this folder"
-            className="ai-input !py-2 !pl-9 !pr-3 text-sm w-52"
+            className="ai-input !py-2 !pl-9 !pr-3 text-sm w-32 sm:w-52"
           />
         </div>
         <div className="flex rounded-lg border border-line overflow-hidden">
@@ -253,23 +253,23 @@ export function FileExplorer({
             <Upload className="text-accent" size={28} />
           </div>
           <h3 className="text-xl font-semibold text-ink mb-1">This folder is empty</h3>
-          <p className="text-muted">Drag files here, or use Upload Files / Upload Folder above.</p>
+          <p className="text-muted">Drag files here, or use the upload buttons above.</p>
         </div>
       ) : view === 'list' ? (
         /* ── LIST VIEW ── */
-        <div className="rounded-xl border border-line overflow-hidden">
-          <div className="grid grid-cols-[1fr_120px_110px_140px] gap-2 px-4 py-2.5 bg-surface2 text-xs font-medium text-muted border-b border-line">
+        <div className="rounded-xl border border-line bg-surface overflow-hidden">
+          <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_110px_90px_190px] gap-2 px-4 py-2.5 bg-surface2 text-xs font-medium text-muted border-b border-line">
             <span>Name</span>
-            <span>Type</span>
-            <span>Size</span>
-            <span>Modified</span>
+            <span className="hidden sm:block">Type</span>
+            <span className="hidden sm:block">Size</span>
+            <span className="hidden sm:block">Modified</span>
           </div>
 
           {subfolders.map((folder) => (
             <div
               key={folder.id}
               onDoubleClick={() => setCurrentFolderId(folder.id)}
-              className="group grid grid-cols-[1fr_120px_110px_140px] gap-2 px-4 py-2.5 items-center border-b border-line/60 hover:bg-surface2 cursor-pointer"
+              className="group grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_110px_90px_190px] gap-2 px-4 py-2.5 items-center border-b border-line/60 hover:bg-surface2 cursor-pointer"
             >
               <div className="flex items-center gap-2.5 min-w-0">
                 <Folder size={18} className="text-accent flex-shrink-0" />
@@ -289,10 +289,10 @@ export function FileExplorer({
                   </button>
                 )}
               </div>
-              <span className="text-xs text-muted">Folder</span>
-              <span className="text-xs text-muted">—</span>
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-muted">{formatDate(folder.updatedAt)}</span>
+              <span className="hidden sm:block text-xs text-muted">Folder</span>
+              <span className="hidden sm:block text-xs text-muted">—</span>
+              <div className="flex items-center justify-end sm:justify-between gap-2">
+                <span className="hidden sm:block text-xs text-muted whitespace-nowrap">{formatDate(folder.updatedAt)}</span>
                 <RowActions
                   onRename={() => startRename(folder.id, 'folder', folder.name)}
                   onDelete={() => onDeleteFolder(folder.id)}
@@ -307,7 +307,7 @@ export function FileExplorer({
               <div
                 key={file.id}
                 onDoubleClick={() => setPreviewFile(file)}
-                className="group grid grid-cols-[1fr_120px_110px_140px] gap-2 px-4 py-2.5 items-center border-b border-line/60 last:border-b-0 hover:bg-surface2 cursor-pointer"
+                className="group grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_110px_90px_190px] gap-2 px-4 py-2.5 items-center border-b border-line/60 last:border-b-0 hover:bg-surface2 cursor-pointer"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <Icon size={18} className="text-muted flex-shrink-0" />
@@ -327,10 +327,10 @@ export function FileExplorer({
                     </button>
                   )}
                 </div>
-                <span className="text-xs text-muted truncate">{fileKind(file)}</span>
-                <span className="text-xs text-muted">{formatBytes(file.size)}</span>
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-muted">{formatDate(file.updatedAt)}</span>
+                <span className="hidden sm:block text-xs text-muted truncate">{fileKind(file)}</span>
+                <span className="hidden sm:block text-xs text-muted whitespace-nowrap">{formatBytes(file.size)}</span>
+                <div className="flex items-center justify-end sm:justify-between gap-2">
+                  <span className="hidden sm:block text-xs text-muted whitespace-nowrap">{formatDate(file.updatedAt)}</span>
                   <RowActions
                     onDownload={() => onDownloadFile(file)}
                     onRename={() => startRename(file.id, 'file', file.name)}
@@ -387,7 +387,7 @@ export function FileExplorer({
 
 function RowActions({ onDownload, onRename, onDelete }: { onDownload?: () => void; onRename: () => void; onDelete: () => void }) {
   return (
-    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+    <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 focus-within:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
       {onDownload && (
         <button onClick={onDownload} className="p-1.5 rounded-md text-muted hover:text-accent hover:bg-surface" aria-label="Download">
           <Download size={15} />

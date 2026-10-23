@@ -17,9 +17,248 @@ export interface BlogPost {
 
 export const blogPosts: BlogPost[] = [
   {
+    id: '4',
+    slug: 'password-encryption-best-practices',
+    title: 'Password Encryption Best Practices (2026)',
+    description:
+      'Modern password encryption best practices in 2026: authenticated AES-256-GCM, PBKDF2 or Argon2id with high iteration counts, salt and IV handling, and why your master password still matters most.',
+    content: `
+# Password Encryption Best Practices (2026)
+
+The security of a password vault comes down to three questions. What cipher encrypts the data? How is the encryption key derived from the master password? And how is the resulting ciphertext stored and transmitted? Get those three right and the rest is implementation detail. Get any one of them wrong and the strongest password in the world will not save your vault from a motivated attacker. This article walks through what "right" looks like in 2026, using EnigmaKeep's choices as a worked example and calling out the places where other tools diverge for good or bad reasons.
+
+## Choose an authenticated cipher
+
+The baseline for 2026 is AES-256 in an authenticated mode: either GCM (Galois/Counter Mode) or the older but still-safe CCM. Both encrypt the data and produce a short authentication tag that detects tampering. If the ciphertext is modified by even a single byte, decryption fails cleanly instead of silently returning corrupted plaintext. EnigmaKeep uses AES-256-GCM. KeePassXC uses AES-256 with HMAC verification, which is a different construction with the same guarantee.
+
+Avoid any tool that stores encrypted data in plain CBC mode without a separate MAC. CBC without authentication is not safe against active attackers — a padding-oracle attack can let an attacker who can submit modified ciphertexts recover the plaintext over time. Any modern design should either use GCM/CCM, or pair CBC with an explicit HMAC-SHA256 under a separate key.
+
+ChaCha20-Poly1305 is a reasonable modern alternative to AES-GCM, and some tools prefer it because it does not need AES hardware acceleration to perform well. Both are secure; use whichever your library offers natively.
+
+## Make the key derivation function expensive
+
+A master password is memorable, which means it has far less entropy than a true random key. Password-based encryption systems compensate by making the derivation from password to key deliberately slow, so that an attacker trying to guess billions of passwords has to pay the slow cost once per guess. The function that does this is the Key Derivation Function, or KDF.
+
+In 2026, the three KDFs worth considering are PBKDF2-SHA256, scrypt, and Argon2id. All three are standardized and widely implemented.
+
+- **PBKDF2-SHA256** is the oldest and most broadly supported. It is safe when configured with a high iteration count — modern guidance is at least 600,000 iterations, matching the OWASP recommendation. EnigmaKeep uses 600,000. Bitwarden uses 600,000 by default. 1Password uses an even higher count for the password-only portion of its two-secret derivation.
+- **scrypt** adds memory hardness, meaning each guess requires both CPU time and RAM. This makes GPU-based cracking much more expensive. Suitable modern parameters are N=2^17, r=8, p=1 or stronger.
+- **Argon2id** is the current state of the art, winner of the 2015 Password Hashing Competition and the default in KeePassXC's modern format. It combines memory hardness with resistance to side-channel attacks. Suitable modern parameters are at least 64 MiB of memory, three iterations, and parallelism matching your CPU.
+
+If you are picking crypto for a new project in 2026, Argon2id is the preferred choice. If you are using a well-maintained tool whose KDF is PBKDF2 with a high iteration count, you are also safe — the attack economics on 600,000-iteration PBKDF2 remain unfavorable to the attacker.
+
+Rotate the iteration count upward as hardware improves. A password manager that locked its KDF parameters in 2015 and never adjusted them is now notably weaker than one that follows the current OWASP guidance.
+
+## Always use a unique salt per vault
+
+A salt is a random value combined with the password before the KDF runs. Its job is to defeat precomputation. Without a salt, an attacker can prepare a single rainbow table of expensive derivations and use it against every vault; with a per-vault random salt, the attacker has to redo the full slow derivation for every guess against every individual vault.
+
+The salt should be:
+
+- At least 16 bytes of cryptographically secure random data (\`crypto.getRandomValues\` in a browser, \`/dev/urandom\` on a Unix system).
+- Different for every vault — never a constant, never derived from the username.
+- Stored alongside the ciphertext; salts are not secret, their value comes from uniqueness.
+
+EnigmaKeep uses a 32-byte random salt generated per encryption, written alongside the IV and a length field at the start of each encrypted block. There is no magic-byte file header — the per-block preamble is XOR-masked with the salt so a hex dump sees random-looking bytes rather than a recognizable format signature. This is the standard construction and is correct.
+
+## Use a fresh IV for every encryption
+
+The initialization vector (IV, sometimes called a nonce) is a per-operation random value that goes into the cipher's encryption. In GCM, reusing an IV with the same key is catastrophic — it leaks the plaintext XOR of the two messages and lets an attacker forge new authenticated ciphertexts. The rule is simple: generate a new random IV every single time you encrypt the vault.
+
+If you are reviewing a password manager's implementation and you see that the IV is derived from the password, derived from the vault filename, or in any way predictable or reused, that is a stop-the-build defect. The IV should come from the operating system's cryptographic RNG and should be used exactly once.
+
+GCM nonces are typically 96 bits, and random 96-bit nonces are safe as long as you do not encrypt more than roughly 2^32 messages under the same key — a limit a human password manager will never approach.
+
+## Keep the key inside the device
+
+The best cipher and the best KDF do not help if the derived key leaves the device. A sound password manager:
+
+- Derives the key in the client, not on a server.
+- Keeps it in memory only as long as the vault is unlocked, then zeroes it on lock.
+- Never transmits the key, the password, or the recovery phrase anywhere.
+- Does not expose any API that could be convinced to decrypt arbitrary data.
+
+EnigmaKeep follows this model literally — there is no server to transmit to, so the key could not leave even if the code tried. Cloud-based zero-knowledge managers do the same thing in principle, but you take their word that it is implemented correctly on the server side. If server-side correctness matters to you, lean toward tools whose server source is also open.
+
+## Store ciphertext without metadata leaks
+
+A well-designed vault file reveals as little as possible about its contents to anyone who gets a copy. Avoid:
+
+- Magic bytes that identify the file format at a glance.
+- PEM-style banners (\`-----BEGIN ENIGMAKEEP VAULT-----\`).
+- Plaintext headers describing version numbers, user IDs, or entry counts.
+- Compression ratios that reveal large entries.
+
+EnigmaKeep writes an opaque binary .dat with no identifying marks — a hex dump looks like random data. The salt and IV are included because they must be, but there is no "this is EnigmaKeep" signature. This is a defense-in-depth measure: it does not add real cryptographic strength, but it reduces targeted attacks that filter for specific tools.
+
+## Pick a master password that matters
+
+All the engineering above raises the per-guess cost to the attacker, but the number of guesses they need to try depends on how predictable your password is. The threat is "offline attack on a stolen vault file" — the attacker takes an unlimited number of guesses at their own pace. Make the password count.
+
+Modern guidance is a passphrase of four to seven unrelated words from a large wordlist, with no personal connections. "correct horse battery staple" has entered folklore for a reason. Length matters more than complexity: a 20-character passphrase of common words beats a 10-character jumble of symbols on every attacker's dictionary.
+
+Change the master password only when you suspect it has leaked. Rotating a strong password on a schedule mostly produces slightly weaker passwords because people make them easier to remember.
+
+## Protect what the password unlocks
+
+Finally, remember what the encrypted vault contains. Even the best cipher does not help if the plaintext leaks after decryption through other channels. Good hygiene around the unlocked vault includes:
+
+- Short idle lock timeouts (EnigmaKeep defaults to 5 minutes).
+- Clipboard clearing after a configurable timeout.
+- Lock on tab close and lock on screen minimize.
+- Screenshot protection where the OS supports it.
+
+These are not strictly cryptographic concerns, but they are part of the real-world threat model. A perfectly encrypted vault that stays unlocked in a cafe is not safer than a weakly encrypted vault that locks after thirty seconds.
+
+## Summary checklist
+
+For a password manager you are evaluating in 2026:
+
+1. Authenticated AES-256 or ChaCha20-Poly1305 (not plain CBC).
+2. PBKDF2-SHA256 at 600,000+ iterations, or scrypt with modern parameters, or Argon2id (preferred).
+3. Per-vault random salt (16+ bytes).
+4. Per-encryption random IV from a CSPRNG, never reused.
+5. Keys derived on the client, never transmitted.
+6. Vault file without identifying magic bytes.
+7. A master password of real length and real randomness.
+8. Lock timeouts, clipboard clearing, and sensible UX defaults.
+
+EnigmaKeep ships all eight by default. Most reputable password managers do too. The point of knowing them is not to show off; it is so you can spot the one tool out of ten that gets a step wrong.
+
+*Published: 2026-10-22 · Updated: 2026-10-22*
+`,
+    author: 'HM Alvee Hasan',
+    authorUrl: 'https://www.hmalveehasan.com',
+    publishDate: '2026-10-22',
+    updatedDate: '2026-10-22',
+    category: 'Security',
+    tags: [
+      'password encryption',
+      'password encryption best practices',
+      'AES-256-GCM',
+      'PBKDF2',
+      'Argon2id',
+      'key derivation',
+      'zero-knowledge',
+    ],
+    image: '/icons/icon-512x512.png',
+    imageAlt: 'Illustration of a layered encryption stack: KDF, cipher, authentication tag',
+    readTime: '11 min read',
+  },
+  {
+    id: '5',
+    slug: 'offline-password-vault-vs-cloud',
+    title: 'Offline Password Vault vs. Cloud: Which Is Safer in 2026?',
+    description:
+      'A head-to-head comparison of offline password vaults and cloud password managers in 2026 — attack surface, breach history, recovery, convenience, and when each one actually wins.',
+    content: `
+# Offline Password Vault vs. Cloud: Which Is Safer in 2026?
+
+Every year the question looks the same: should your passwords live on your own device, or in a vendor's cloud? The honest answer is that both can be safe when the engineering is sound, but they fail in very different ways, and understanding the difference is what lets you pick the one that fits your actual threat model. This article walks through the comparison on four axes — attack surface, breach record, recovery, and convenience — and ends with a straight recommendation.
+
+## What people usually mean by each term
+
+"Offline password vault" means the entire vault, encrypted, lives as a file on your device. No account, no server, no sync. EnigmaKeep, KeePassXC, and 1Password 7 in standalone mode are examples.
+
+"Cloud password manager" means the vendor hosts your encrypted vault on their servers, and client apps keep devices in sync. Encryption happens on the client (so even the vendor cannot read your data in a well-designed cloud product), but the ciphertext exists on their infrastructure. Bitwarden, 1Password 8, Dashlane, and NordPass are examples.
+
+A "self-hosted" option sits in between: the vault is on a server, but one you run. Bitwarden self-hosted and Vaultwarden fit here. It inherits most of the cloud model's benefits and most of its risks, with the vendor dependency replaced by your own operational competence.
+
+## Axis 1: Attack surface
+
+The cloud model has three attack surfaces: your device, the network, and the vendor's infrastructure. Each one can be targeted independently. A breach of the vendor hands an attacker millions of encrypted vaults to crack at leisure; the encryption itself may hold, but the attacker now has unlimited offline tries against every weak master password in the stolen trove. The LastPass incidents of 2022 and 2023 are the textbook case: the ciphertext was taken from vendor backups, and users with weak master passwords were compromised months later.
+
+The offline model has one attack surface: your device. If your device is uncompromised, your vault is uncompromised. There is no vendor to breach because there is no vendor. There is no vault database to steal in aggregate because there is no database. This is a smaller attack surface by construction, not by vendor promise.
+
+The self-hosted model keeps the sync convenience but moves the vendor-infrastructure attack surface to you. If you run and maintain the server competently, your attack surface is comparable to the cloud model with a different owner. If you misconfigure the server (open ports, missing updates, weak admin credentials), your attack surface can be much larger than the cloud model's.
+
+Winner on attack surface: offline, decisively.
+
+## Axis 2: Breach record
+
+Password managers get breached. Not often, but often enough that the record matters. In the last ten years, the public incidents have followed a clear pattern:
+
+- **LastPass (2022-2023):** vendor backup theft, including encrypted vaults. Users with weak master passwords were compromised. User impact ranged from large credential-stuffing campaigns to targeted crypto wallet thefts.
+- **Norton Password Manager (2023):** credential stuffing against existing accounts, not a direct product breach.
+- **Passwordstate (2021):** supply-chain compromise of the self-hosted enterprise product.
+- **Dashlane / 1Password (various years):** phishing campaigns targeting the brand, no direct breach of production systems.
+
+Fully offline tools do not appear on this list, for a structural reason: there is no central target to breach. Individual users have had their devices compromised, as they always will, but there is no event in which a thousand EnigmaKeep or KeePassXC users were affected by a single incident at a vendor. The architecture does not permit it.
+
+Winner on breach record: offline, by structural absence.
+
+## Axis 3: Recovery when things go wrong
+
+Here the picture flips. Cloud managers have real recovery stories: if you forget your master password, there are account recovery flows, administrator overrides (in enterprise plans), and recovery kits that can be printed and stored. 1Password's Secret Key plus master password model means a forgotten master password can be recovered if the Secret Key survives, and vice versa. Bitwarden supports organization-level account recovery.
+
+Offline tools have one recovery mechanism — a recovery phrase or key — and no provider to fall back on. EnigmaKeep issues a 12-word BIP39 recovery phrase when you create a vault; if you lose both the master password and the phrase, the vault is unrecoverable, by design. KeePassXC supports a key file in addition to the master password, which can serve as a recovery mechanism if you store the key file somewhere safe and separate.
+
+The offline recovery story is unambiguous: write the recovery phrase down, store it offline, and treat it with the same seriousness you treat the master password. If you cannot commit to that habit, the offline model is actively riskier for you than the cloud model, because the cloud vendor has recovery paths that offline tools deliberately do not.
+
+Winner on recovery: cloud, because the recovery UX is more forgiving for a casual user.
+
+## Axis 4: Convenience in daily use
+
+Cloud managers win here, cleanly. Automatic sync across devices means you add a password on your phone and it is on your laptop before you switch tabs. Browser extensions autofill with a hotkey. Shared vaults let a family or team coordinate without emailing passwords around. The modern cloud UX is genuinely good.
+
+Offline tools require more deliberate behavior. You export the vault file manually to move it to another device, or you keep each device's vault separate. There is no shared vault for a family (unless the "share" is really "the same vault file on both devices"). Autofill ranges from "built-in browser extension" (KeePassXC) to "copy-paste out of the app" (EnigmaKeep today). Multi-device TOTP means moving the TOTP seeds along with the vault.
+
+The convenience gap is smaller than it was five years ago. PWAs with service workers let an offline tool install itself and run anywhere a browser runs. File-sync via iCloud Drive, Syncthing, or just a USB stick covers most multi-device needs for a single user. But cloud managers remain more convenient for most people most of the time.
+
+Winner on convenience: cloud, cleanly.
+
+## Who should pick which
+
+Pick an offline password vault if:
+
+- You are one person using one, two, or three devices.
+- You are comfortable writing down a recovery phrase and treating it seriously.
+- You do not need shared family or team vaults.
+- You value the structural guarantee that no vendor holds your encrypted data.
+- You are willing to move a file between devices occasionally.
+
+Pick a cloud password manager if:
+
+- You need autofill across multiple browsers without thinking about it.
+- You share passwords with family, teammates, or clients.
+- You will not reliably protect a recovery phrase, and you want the vendor's recovery flows as a safety net.
+- You consistently use more than three devices and need them all in sync.
+
+Pick a self-hosted manager (Bitwarden/Vaultwarden) if:
+
+- You want cloud-manager convenience but do not want a third-party vendor to hold your data.
+- You already run or want to run a small server.
+- You can commit to patching that server and maintaining backups.
+
+## The honest conclusion
+
+The safest password manager is the one you actually use consistently, with a strong master password, two-factor authentication where available, and a recovery plan that works for your discipline level. For a careful, privacy-focused individual, offline wins on both attack surface and breach record. For a casual user who needs sync and autofill, a well-run cloud manager loses nothing in real-world safety because its recovery and convenience advantages prevent the kind of lapses (reused passwords, unlocked sessions, lost vaults) that actually cause the harm.
+
+EnigmaKeep is built for the first group. If you are the second group, use Bitwarden or 1Password and feel good about it. The worst choice is going back to passwords saved in a browser profile that syncs through a Google account.
+
+*Published: 2026-10-22 · Updated: 2026-10-22*
+`,
+    author: 'HM Alvee Hasan',
+    authorUrl: 'https://www.hmalveehasan.com',
+    publishDate: '2026-10-22',
+    updatedDate: '2026-10-22',
+    category: 'Comparison',
+    tags: [
+      'offline password vault',
+      'offline password manager',
+      'password vault offline',
+      'cloud password manager',
+      'LastPass breach',
+      'password manager comparison',
+    ],
+    image: '/icons/icon-512x512.png',
+    imageAlt: 'Diagram contrasting an offline vault file with a cloud vault database',
+    readTime: '9 min read',
+  },
+  {
     id: '1',
     slug: 'what-is-zero-knowledge-encryption',
-    title: 'What is Zero-Knowledge Encryption? Complete Guide 2024',
+    title: 'What is Zero-Knowledge Encryption? Complete Guide',
     description: 'Learn how zero-knowledge encryption keeps your passwords secure. Understand the technology behind offline password managers and why it matters for your privacy.',
     content: `
 # What is Zero-Knowledge Encryption? Complete Guide 2024

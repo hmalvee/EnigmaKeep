@@ -1,60 +1,14 @@
 # robots.txt for EnigmaKeep Password Manager
 # https://www.enigmakeep.com
 
+# ----- Baseline: all other crawlers -----
+# The /app route is the private vault UI (no useful content for search), so
+# block it for everyone. All other public routes are allowed.
 User-agent: *
 Allow: /
-Allow: /privacy
-Allow: /terms
-Allow: /security
-Allow: /docs
-Allow: /pwa-guide
-
-# Explicit AI crawler permissions
-User-agent: GPTBot
-Allow: /
-
-User-agent: ChatGPT-User
-Allow: /
-
-User-agent: CCBot
-Allow: /
-
-User-agent: anthropic-ai
-Allow: /
-
-User-agent: Claude-Web
-Allow: /
-
-User-agent: Google-Extended
-Allow: /
-
-User-agent: Bingbot
-Allow: /
-
-User-agent: BingPreview
-Allow: /
-
-User-agent: Applebot-Extended
-Allow: /
-
-# General AI assistant crawlers
-User-agent: PerplexityBot
-Allow: /
-
-# Emerging AI research crawlers
-User-agent: NewsNowBot
-Allow: /
-
-# Don't index the app itself (it's private user data)
 Disallow: /app
 
-# Sitemap
-Sitemap: https://www.enigmakeep.com/sitemap.xml
-
-# Crawl delay (be nice to our servers)
-Crawl-delay: 1
-
-# Popular search engines
+# ----- Classic search engines -----
 User-agent: Googlebot
 Allow: /
 Disallow: /app
@@ -63,11 +17,15 @@ User-agent: Bingbot
 Allow: /
 Disallow: /app
 
-User-agent: Slurp
+User-agent: BingPreview
 Allow: /
 Disallow: /app
 
 User-agent: DuckDuckBot
+Allow: /
+Disallow: /app
+
+User-agent: Slurp
 Allow: /
 Disallow: /app
 
@@ -79,18 +37,78 @@ User-agent: YandexBot
 Allow: /
 Disallow: /app
 
-# Block AI scrapers (optional - uncomment if desired)
-# User-agent: GPTBot
-# Disallow: /
+# ----- AI SEARCH CRAWLERS (gate citation in AI answers) -----
+# These are the user agents that decide whether EnigmaKeep can be cited in
+# ChatGPT Search, Claude's search features, Perplexity, etc. Allow them.
 
-# User-agent: ChatGPT-User
-# Disallow: /
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /app
 
-# User-agent: CCBot
-# Disallow: /
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /app
 
-# User-agent: anthropic-ai
-# Disallow: /
+User-agent: PerplexityBot
+Allow: /
+Disallow: /app
 
-# User-agent: Claude-Web
-# Disallow: /
+# ----- AI user-triggered browse fetchers -----
+# These fetch pages on behalf of a specific user action, not for building an
+# index. Allowing them keeps the content fetchable when a user asks their AI
+# assistant about EnigmaKeep.
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /app
+
+User-agent: Claude-User
+Allow: /
+Disallow: /app
+
+User-agent: Perplexity-User
+Allow: /
+Disallow: /app
+
+# ----- AI TRAINING crawlers (control model training only) -----
+# These do NOT control citation in AI answers. Allow or deny based on your
+# licensing preference, not on search visibility.
+
+User-agent: GPTBot
+Allow: /
+Disallow: /app
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /app
+
+User-agent: anthropic-ai
+Allow: /
+Disallow: /app
+
+User-agent: Claude-Web
+Allow: /
+Disallow: /app
+
+User-agent: CCBot
+Allow: /
+Disallow: /app
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /app
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /app
+
+User-agent: Bytespider
+Allow: /
+Disallow: /app
+
+User-agent: cohere-ai
+Allow: /
+Disallow: /app
+
+# ----- Sitemap -----
+Sitemap: https://www.enigmakeep.com/sitemap.xml

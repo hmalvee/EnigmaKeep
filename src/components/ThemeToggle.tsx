@@ -12,7 +12,7 @@ export function ThemeToggle() {
 
   return (
     <div
-      className="flex items-center gap-0.5 bg-surface2 p-1 rounded-xl border border-line"
+      className="flex items-center gap-0.5 p-0.5 rounded-md border border-line"
       role="group"
       aria-label="Theme"
       title={`Theme: ${theme} (${effectiveTheme})`}
@@ -22,16 +22,16 @@ export function ThemeToggle() {
           key={id}
           type="button"
           onClick={() => setTheme(id)}
-          className={`p-2 rounded-lg transition-all duration-200 ${
+          className={`p-1.5 rounded ${
             theme === id
-              ? 'bg-surface text-accent shadow-sm border border-line'
-              : 'text-muted hover:text-ink border border-transparent'
+              ? 'bg-ink/10 text-ink'
+              : 'text-muted hover:text-ink'
           }`}
           title={label}
           aria-label={label}
           aria-pressed={theme === id}
         >
-          <Icon size={16} />
+          <Icon size={15} strokeWidth={1.8} />
         </button>
       ))}
     </div>

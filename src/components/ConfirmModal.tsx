@@ -22,7 +22,7 @@ export function ConfirmModal({
   const variantStyles = {
     danger: {
       icon: 'text-danger',
-      button: 'bg-danger hover:bg-danger/90 text-white focus:ring-danger'
+      button: 'bg-danger hover:bg-danger/90 text-bg focus:ring-danger'
     },
     warning: {
       icon: 'text-accent',

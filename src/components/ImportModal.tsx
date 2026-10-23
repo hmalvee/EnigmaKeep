@@ -37,6 +37,9 @@ export function ImportModal({ onImport, onClose }: ImportModalProps) {
 
     setIsProcessing(true);
     try {
+      if (file.size > 20 * 1024 * 1024) {
+        throw new Error('Import file is larger than 20 MB');
+      }
       const content = await file.text();
       let importResult: ImportResult;
 

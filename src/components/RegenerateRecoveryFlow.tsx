@@ -49,9 +49,10 @@ Created: ${new Date().toLocaleString()}
     const a = document.createElement('a');
     a.href = url;
     a.download = 'EnigmaKeep-Recovery-Phrase.txt';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
-    setConfirmDownload(true);
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
   };
 
   const handleContinueToVerify = () => {
@@ -125,13 +126,25 @@ Created: ${new Date().toLocaleString()}
           </div>
         </div>
 
+        {/* Writing it down is the safe path; the download is optional and
+            must never be the only way to continue. */}
+        <label className="flex items-start gap-3 rounded-xl border border-line bg-surface2 p-4 text-sm text-ink">
+          <input
+            type="checkbox"
+            checked={confirmDownload}
+            onChange={(e) => setConfirmDownload(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-accent"
+          />
+          <span>I have written these 12 words down and stored them somewhere safe.</span>
+        </label>
+
         <div className="flex gap-3">
           <button
             onClick={handleDownload}
             className="flex-1 px-4 py-3 border-2 border-line text-accent rounded-xl hover:bg-surface2 transition-all duration-200 font-medium flex items-center justify-center gap-2"
           >
             <Download size={18} />
-            Download Backup
+            Download as text (less safe)
           </button>
           <button
             onClick={handleContinueToVerify}
@@ -141,12 +154,6 @@ Created: ${new Date().toLocaleString()}
             I've Written It Down
           </button>
         </div>
-
-        {!confirmDownload && (
-          <p className="text-sm text-accent font-medium text-center">
-            Please download or write down the phrase before continuing
-          </p>
-        )}
 
         <button
           onClick={onCancel}

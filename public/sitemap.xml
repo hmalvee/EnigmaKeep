@@ -1,83 +1,22 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-        xsi:schemaLocation="http://www.sitemaps.org/schemas/sitemap/0.9
-        http://www.sitemaps.org/schemas/sitemap/0.9/sitemap.xsd">
-
-  <!-- Homepage -->
-  <url>
-    <loc>https://www.enigmakeep.com/</loc>
-    <lastmod>2025-11-12</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>1.0</priority>
-  </url>
-
-  <!-- Privacy Policy -->
-  <url>
-    <loc>https://www.enigmakeep.com/privacy</loc>
-    <lastmod>2025-11-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-
-  <!-- Terms of Service -->
-  <url>
-    <loc>https://www.enigmakeep.com/terms</loc>
-    <lastmod>2025-11-12</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-
-  <!-- Security Information -->
-  <url>
-    <loc>https://www.enigmakeep.com/blog</loc>
-    <lastmod>2025-11-12</lastmod>
-    <changefreq>weekly</changefreq>
-    <priority>0.5</priority>
-  </url>
-
-  <!-- Guides & Resources (SEO) -->
-  <url>
-    <loc>https://www.enigmakeep.com/details</loc>
-    <lastmod>2026-07-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
-  </url>
-  <url>
-    <loc>https://www.enigmakeep.com/details/password-security-guide</loc>
-    <lastmod>2026-07-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://www.enigmakeep.com/details/zero-knowledge-encryption</loc>
-    <lastmod>2026-07-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://www.enigmakeep.com/details/offline-password-manager</loc>
-    <lastmod>2026-07-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://www.enigmakeep.com/details/two-factor-authentication</loc>
-    <lastmod>2026-07-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://www.enigmakeep.com/details/encrypted-file-storage</loc>
-    <lastmod>2026-07-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-  <url>
-    <loc>https://www.enigmakeep.com/details/recovery-phrase-guide</loc>
-    <lastmod>2026-07-23</lastmod>
-    <changefreq>monthly</changefreq>
-    <priority>0.5</priority>
-  </url>
-
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://www.enigmakeep.com/</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/privacy</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/terms</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/blog</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/blog/what-is-zero-knowledge-encryption</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/blog/offline-password-manager-benefits</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/blog/password-manager-setup-guide</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/blog/password-encryption-best-practices</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/blog/offline-password-vault-vs-cloud</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/details</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/details/best-offline-password-managers-2026</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/details/password-manager-without-cloud</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/details/open-source-password-manager</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/details/password-security-guide</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/details/zero-knowledge-encryption</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/details/offline-password-manager</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/details/two-factor-authentication</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/details/encrypted-file-storage</loc><lastmod>2026-10-22</lastmod></url>
+  <url><loc>https://www.enigmakeep.com/details/recovery-phrase-guide</loc><lastmod>2026-10-22</lastmod></url>
 </urlset>

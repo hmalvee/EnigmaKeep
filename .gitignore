@@ -9,6 +9,7 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+dev-dist
 *.local
 
 .vscode/*
@@ -29,3 +30,9 @@ patent/
 .agent/
 CLAUDE.md
 AGENTS.md
+research/guardian-recovery/.build/
+
+# Research artifacts, the manuscript and internal docs are kept out of the public repository
+research/
+paper/
+docs/

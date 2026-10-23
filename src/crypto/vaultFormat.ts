@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 import type { EncryptedBytes } from './encryption';
 
 /**
@@ -16,7 +17,12 @@ import type { EncryptedBytes } from './encryption';
  *   salt(32) | iv(12) | masked_len(4) | ciphertext+tag
  * masked_len = ciphertext_length XOR salt[0..3] as big-endian u32
  *
- * File = primary block [ + recovery block ]
+ * File = primary block [ + recovery block [ + extra blocks ] ] [ + region ]
+ * Extra blocks (guardian recovery) are only written alongside a recovery block,
+ * so block positions stay unambiguous. Everything after the block chain is the
+ * region: random padding that may hold a hidden vault (crypto/hiddenVault.ts).
+ * The chain ends where the next 48 bytes do not parse as a block header; the
+ * writer makes sure the region never starts with a plausible header.
  */
 
 // Legacy v2 markers — read only.
@@ -35,9 +41,15 @@ const BLOCK_HEADER = SALT_LEN + IV_LEN + LEN_FIELD; // 48
 const MIN_CIPHER_LEN = 16;
 const MAX_CIPHER_LEN = 512 * 1024 * 1024; // 512 MiB hard ceiling
 
+/** Primary + recovery + one guardian parameter block per delay tier (at most 4) + the recovery copy. */
+const MAX_BLOCKS = 8;
+export const BLOCK_HEADER_BYTES = BLOCK_HEADER;
+
 export interface VaultContainer {
   primary: EncryptedBytes;
   recovery?: EncryptedBytes;
+  /** Guardian recovery blocks (one puzzle-parameter block per tier, then the living recovery copy). */
+  extra?: EncryptedBytes[];
 }
 
 function readUint32BE(bytes: Uint8Array, offset: number): number {
@@ -110,45 +122,65 @@ function readBlockV3(
  * Serialise to opaque high-entropy bytes (v3). No magic / version / flags.
  */
 export function packVaultContainer(container: VaultContainer): Uint8Array {
-  const hasRecovery = !!container.recovery;
-  const total =
-    blockByteLength(container.primary) +
-    (hasRecovery ? blockByteLength(container.recovery!) : 0);
+  const extra = container.extra || [];
+  if (extra.length > 0 && !container.recovery) {
+    throw new Error('Extra vault blocks require a recovery block');
+  }
+  const blocks = [container.primary, ...(container.recovery ? [container.recovery] : []), ...extra];
+  if (blocks.length > MAX_BLOCKS) {
+    throw new Error('Too many vault blocks');
+  }
 
-  const out = new Uint8Array(total);
-  let offset = writeBlock(out, 0, container.primary);
-  if (hasRecovery) {
-    writeBlock(out, offset, container.recovery!);
+  const out = new Uint8Array(blocks.reduce((sum, b) => sum + blockByteLength(b), 0));
+  let offset = 0;
+  for (const block of blocks) {
+    offset = writeBlock(out, offset, block);
   }
   return out;
 }
 
-/** Parse v3 opaque bytes. Returns null if the buffer is not a plausible vault. */
+/**
+ * Parse a block chain that must fill the buffer exactly (a hidden vault's
+ * chain, or the body of a text wrapper). Returns null otherwise.
+ */
 export function unpackVaultContainer(bytes: Uint8Array): VaultContainer | null {
-  if (bytes.length < BLOCK_HEADER + MIN_CIPHER_LEN) return null;
-
-  // Prefer v3 (no magic). Fall through to v2 if that fails.
-  const v3 = unpackV3(bytes);
-  if (v3) return v3;
-  return unpackV2(bytes);
+  const file = unpackVaultFile(bytes);
+  return file && file.visibleLength === bytes.length ? file.container : null;
 }
 
-function unpackV3(bytes: Uint8Array): VaultContainer | null {
-  const first = readBlockV3(bytes, 0);
-  if (!first) return null;
+/**
+ * Parse a raw vault file: the longest block chain at the start of the buffer,
+ * followed by the region. Returns null if the buffer does not start with a
+ * plausible block. v2 files (with magic bytes) are checked first because
+ * their header is not a v3 block.
+ */
+export function unpackVaultFile(bytes: Uint8Array): { container: VaultContainer; visibleLength: number } | null {
+  if (bytes.length < BLOCK_HEADER + MIN_CIPHER_LEN) return null;
+  const v2 = unpackV2(bytes);
+  if (v2) return { container: v2, visibleLength: bytes.length };
+  return unpackV3(bytes);
+}
 
-  const container: VaultContainer = { primary: first.block };
+/** True when the first 48 bytes of `region` would be read as a block header. */
+export function regionStartLooksLikeBlock(region: Uint8Array): boolean {
+  return readBlockV3(region, 0) !== null;
+}
 
-  if (first.next === bytes.length) {
-    return container;
+function unpackV3(bytes: Uint8Array): { container: VaultContainer; visibleLength: number } | null {
+  const blocks: EncryptedBytes[] = [];
+  let offset = 0;
+  while (offset < bytes.length && blocks.length < MAX_BLOCKS) {
+    const read = readBlockV3(bytes, offset);
+    if (!read) break;
+    blocks.push(read.block);
+    offset = read.next;
   }
+  if (blocks.length === 0) return null;
 
-  const second = readBlockV3(bytes, first.next);
-  if (!second || second.next !== bytes.length) {
-    return null;
-  }
-  container.recovery = second.block;
-  return container;
+  const container: VaultContainer = { primary: blocks[0] };
+  if (blocks.length > 1) container.recovery = blocks[1];
+  if (blocks.length > 2) container.extra = blocks.slice(2);
+  return { container, visibleLength: offset };
 }
 
 function readBlockV2(
@@ -278,7 +310,13 @@ export function unwrapStealthText(text: string): VaultContainer | null {
 }
 
 export type ParsedVaultFile =
-  | { kind: 'v2'; container: VaultContainer }
+  | {
+      kind: 'v2';
+      container: VaultContainer;
+      /** Bytes of the visible block chain, and everything after it. Both empty for text wrappers. */
+      visibleBytes: Uint8Array;
+      region: Uint8Array;
+    }
   | { kind: 'legacy'; parsed: any };
 
 /**
@@ -288,9 +326,14 @@ export type ParsedVaultFile =
 export function parseVaultFile(buffer: ArrayBuffer): ParsedVaultFile | null {
   const bytes = new Uint8Array(buffer);
 
-  const rawContainer = unpackVaultContainer(bytes);
-  if (rawContainer) {
-    return { kind: 'v2', container: rawContainer };
+  const rawFile = unpackVaultFile(bytes);
+  if (rawFile) {
+    return {
+      kind: 'v2',
+      container: rawFile.container,
+      visibleBytes: bytes.slice(0, rawFile.visibleLength),
+      region: bytes.slice(rawFile.visibleLength)
+    };
   }
 
   // Only attempt text decode for modest buffers — huge binary misread as UTF-8
@@ -315,7 +358,7 @@ export function parseVaultFile(buffer: ArrayBuffer): ParsedVaultFile | null {
   if (nulCount < sample * 0.01) {
     const stealth = unwrapStealthText(text);
     if (stealth) {
-      return { kind: 'v2', container: stealth };
+      return { kind: 'v2', container: stealth, visibleBytes: new Uint8Array(0), region: new Uint8Array(0) };
     }
   }
 

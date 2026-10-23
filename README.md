@@ -1,49 +1,53 @@
 # EnigmaKeep
 
-Offline, zero-knowledge password manager. Your vault stays on your device — no accounts, no cloud sync, no telemetry.
+EnigmaKeep is a password manager that runs in your browser and keeps everything on your own devices. There is no account to create and no server holding your vault. Your passwords, two-factor codes, notes and files live in one encrypted file that only you can open.
 
-**Maintainer:** [HM Alvee Hasan (@hmalvee)](https://github.com/hmalvee)  
-**Homepage:** [enigmakeep.com](https://enigmakeep.com/)  
-**Repository:** [github.com/hmalvee/EnigmaKeep](https://github.com/hmalvee/EnigmaKeep)  
-**License:** MIT
+- Website: [enigmakeep.com](https://enigmakeep.com/)
+- Source: [github.com/hmalvee/EnigmaKeep](https://github.com/hmalvee/EnigmaKeep)
+- Maintainer: HM Alvee Hasan ([@hmalvee](https://github.com/hmalvee))
+- Licence: [AGPL-3.0](LICENSE) for the app, [MIT](src/crypto/LICENSE) for the cryptography in `src/crypto/` (see [LICENSING.md](LICENSING.md))
 
-## Features
+What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
 
-- **Offline-first** — no servers; nothing leaves the browser
-- **AES-256-GCM vault encryption** with PBKDF2 (600k iterations)
-- **Opaque binary vault files** (`.dat`) — high-entropy ciphertext only; no plaintext metadata banners
-- **Encrypted file manager** — folders, upload, preview, and edit inside the vault
-- **Biometric unlock** via WebAuthn / platform authenticators
-- **12-word BIP39 recovery phrase** with derived recovery key
-- **Built-in TOTP authenticator**, secure notes, categories
-- **Password generator** and strength meter
-- **Import / export** for common password managers (CSV / JSON)
-- **PWA** install for desktop and mobile
-- **Local encrypted snapshots** for recovery if a save fails
-- **Auto-lock**, unlock backoff, and secure clipboard clearing
+## Screenshots
 
-## Stack
+![EnigmaKeep landing page](screenshots/landing.png)
 
-| Area | Choice |
-|------|--------|
-| UI | React 18 + TypeScript |
-| Styling | Tailwind CSS |
-| Build | Vite + vite-plugin-pwa |
-| Crypto | Web Crypto API, BIP39 |
-| Storage | File System Access API, IndexedDB |
+| | |
+|---|---|
+| ![Passwords view](screenshots/vault-passwords.png) | ![Two-factor codes](screenshots/vault-2fa.png) |
+| Passwords, with copy buttons and a per-entry menu | Two-factor codes with a countdown |
+| ![Security settings](screenshots/settings-security.png) | ![Guardian recovery schedule](screenshots/guardian-recovery.png) |
+| Security settings: Secret Key, biometrics, master password | Guardian recovery with a graded delay: more guardians, shorter wait |
+| ![Unlock screen](screenshots/unlock.png) | ![Mobile](screenshots/mobile-passwords.png) |
+| Unlock with the master password, Secret Key or biometrics | The same vault on a phone |
 
-## Security model
+## What it does
 
-| Capability | Implementation |
-|------------|----------------|
-| Vault encryption | AES-256-GCM with random IVs |
-| Key derivation | PBKDF2 (600,000 iterations, SHA-256) |
-| Vault format | Opaque binary container (legacy formats still readable) |
-| Recovery phrase | BIP39 mnemonic → derived encryption password |
-| Biometric unlock | WebAuthn; wrapped credential, not a plaintext password cache |
-| Auto-lock | Inactivity timer + clipboard purge |
+The app stores logins, TOTP codes, secure notes and arbitrary files (with folders, preview and editing) inside the vault. It generates passwords, checks their strength and imports from 1Password, Bitwarden, LastPass, Chrome and CSV or JSON exports. You can install it as a PWA on desktop and mobile, and it works offline once loaded.
 
-**Zero knowledge:** All crypto runs in the browser. If the master password and recovery phrase are lost, the vault cannot be recovered by anyone — including the developer.
+On the security side:
+
+| | How it works |
+|---|---|
+| Vault encryption | AES-256-GCM, fresh random salt and nonce on every save |
+| Unlocking | Master password through PBKDF2-SHA-256 (600,000 iterations), combined with a 128-bit Secret Key kept on your devices (HKDF). A stolen vault file can't be brute-forced from the password alone. |
+| New devices | Scan the Secret Key's QR code from your printed Emergency Kit, once per device |
+| Biometric unlock | WebAuthn PRF: the key that wraps your master password only exists after your device's authenticator verifies you |
+| Recovery phrase | 12-word BIP-39 phrase that opens a separate, always-current recovery copy of the vault |
+| Guardian recovery | Optional. Trusted people hold shares; a set number of them plus the vault file plus a minimum delay of sequential computation are needed, so you have time to notice and cancel. The delay can shrink as more guardians cooperate, and the puzzle is replaced on every save, so a finished recovery opens only the version it started from. |
+| Decoy vault | Optional. A duress password opens a harmless decoy from the same file; the real vault hides in random padding that every file carries, so a single copy of the file cannot show that a hidden vault exists |
+| Rollback detection | Each save is stamped inside the ciphertext; a device warns when a file is older than the version it last opened |
+| Vault file | Header-less blocks of ciphertext followed by random padding; no readable metadata |
+| In the browser | Strict Content Security Policy in production, auto-lock, clipboard clearing, local encrypted snapshots |
+
+If you lose the master password, the Secret Key, the recovery phrase and your guardians' cards, nobody can open the vault, including us. That is the point of zero knowledge, so keep your Emergency Kit and recovery phrase somewhere safe.
+
+Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
+
+## Benchmark your device
+
+Guardian recovery makes a computer work for the delay the owner chose, and browsers are slower at this than native code. Open `/bench` (for example [enigmakeep.com/bench](https://enigmakeep.com/bench)) to measure your own device in about 30 seconds and see what a 1-, 7- or 30-day delay would mean on it.
 
 ## Quick start
 
@@ -51,66 +55,40 @@ Offline, zero-knowledge password manager. Your vault stays on your device — no
 git clone https://github.com/hmalvee/EnigmaKeep.git
 cd EnigmaKeep
 npm install
-npm run dev       # local development
-npm run build     # production bundle
-npm run preview   # preview production build
+npm run dev        # http://localhost:5173
 ```
 
-Deploy the contents of `dist/` to any static host (Netlify, GitHub Pages, Vercel, etc.).
-
-## Core workflows
-
-### Create a vault
-1. Choose a strong master password (minimum length enforced).
-2. Save the 12-word recovery phrase offline and verify it.
-3. Save the encrypted vault file when prompted (File System Access API on supported browsers).
-
-### Unlock
-1. Enter the master password, or use biometrics when enabled.
-2. Decrypted data lives only in memory for the session.
-3. Lock or idle timeout clears session secrets.
-
-### Files inside the vault
-Use the built-in file manager to store encrypted files and folders alongside passwords and notes. Large vaults use a raw binary save path to avoid encoding blow-up.
-
-### Recovery
-Unlock with the recovery phrase if the master password is forgotten. Regenerating the phrase invalidates the previous one after verification.
-
-## Project map
-
-- `src/pages/LandingPage.tsx` — marketing site
-- `src/App.tsx` — unlocked vault shell
-- `src/crypto/` — encryption, vault format, recovery, device binding
-- `src/utils/vaultManager.ts` — save / load / verify
-- `src/components/FileExplorer.tsx` — encrypted file manager
-- `src/components/LoginScreen.tsx` — unlock, biometric, snapshot restore
+`npm run build` writes a static site to `dist/`, which you can host anywhere (Netlify, GitHub Pages, your own server). The `netlify.toml` file contains the production security headers; copy them if you host elsewhere.
 
 ## Scripts
 
-| Command | Purpose |
-|---------|---------|
-| `npm run dev` | Dev server |
-| `npm run build` | Production build |
-| `npm run preview` | Preview build |
-| `npm run lint` | ESLint |
-| `npm run typecheck` | TypeScript check |
+| Command | What it does |
+|---|---|
+| `npm run dev` | Development server |
+| `npm run build` / `npm run preview` | Production build and local preview |
+| `npm run lint` / `npm run typecheck` | ESLint and TypeScript checks |
+
+## Repository layout
+
+```
+src/
+  crypto/        encryption, vault format, Secret Key, recovery phrase,
+                 Shamir sharing, time-lock puzzles, guardian recovery
+  utils/         vault manager, storage, biometric unlock, import/export
+  components/    vault UI, login and recovery screens, settings
+  workers/       background solver for guardian recovery
+  pages/, site/  marketing site, blog and legal pages
+public/          static assets, icons, PWA manifest
+screenshots/     images used in this README
+scripts/         build helpers
+```
 
 ## Contributing
 
-1. Fork and branch from `main`.
-2. Keep branding consistent (`EnigmaKeep`).
-3. Prefer accessible UI (keyboard, focus, ARIA on modals).
-4. Document crypto changes clearly in the PR.
-5. Open a PR against `main` with UI screenshots when relevant.
+See [CONTRIBUTING.md](CONTRIBUTING.md). Never paste recovery phrases, Secret Keys or vault files into issues.
 
 ## Support
 
-- **Issues:** https://github.com/hmalvee/EnigmaKeep/issues  
-- **Discussions:** https://github.com/hmalvee/EnigmaKeep/discussions  
-- **Security:** contact via the maintainer’s [GitHub profile](https://github.com/hmalvee)
-
-Never paste recovery phrases or vault files into public issues.
-
----
-
-**EnigmaKeep** — offline secrets, under your control.
+- Bugs and ideas: [issues](https://github.com/hmalvee/EnigmaKeep/issues)
+- Questions: [discussions](https://github.com/hmalvee/EnigmaKeep/discussions)
+- Security reports: [SECURITY.md](SECURITY.md)

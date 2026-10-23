@@ -14,11 +14,12 @@ export function exportToCSV(entries: PasswordEntry[]): string {
 
   for (const entry of entries) {
     const row = [
-      escapeCSVField(entry.title),
-      escapeCSVField(entry.username || ''),
+      escapeCSVField(neutralizeFormula(entry.title)),
+      escapeCSVField(neutralizeFormula(entry.username || '')),
+      // Passwords are exported verbatim so they still work after re-import.
       escapeCSVField(entry.password),
-      escapeCSVField(entry.url || ''),
-      escapeCSVField(entry.notes || '')
+      escapeCSVField(neutralizeFormula(entry.url || '')),
+      escapeCSVField(neutralizeFormula(entry.notes || ''))
     ];
     csvRows.push(row.join(','));
   }
@@ -40,6 +41,11 @@ export function exportToJSON(entries: PasswordEntry[]): string {
   return JSON.stringify(exportData, null, 2);
 }
 
+/** Stop spreadsheet apps from running cell text like `=HYPERLINK(...)` as a formula. */
+function neutralizeFormula(field: string): string {
+  return /^[=+\-@\t\r]/.test(field) ? `'${field}` : field;
+}
+
 function escapeCSVField(field: string): string {
   if (field.includes(',') || field.includes('"') || field.includes('\n')) {
     return `"${field.replace(/"/g, '""')}"`;
@@ -52,11 +58,19 @@ export interface ImportResult {
   errors: string[];
 }
 
+/**
+ * Imported JSON is untrusted: a non-string field persisted into the vault
+ * would crash the list view on every unlock. Keep strings, drop the rest.
+ */
+function asString(value: unknown, maxLength = 10_000): string {
+  return typeof value === 'string' ? value.slice(0, maxLength) : '';
+}
+
 export function importFromCSV(csvContent: string): ImportResult {
   const entries: Omit<PasswordEntry, 'id' | 'createdAt' | 'updatedAt'>[] = [];
   const errors: string[] = [];
 
-  const lines = csvContent.split('\n').filter(line => line.trim());
+  const lines = csvContent.replace(/\r\n?/g, '\n').split('\n').filter(line => line.trim());
 
   if (lines.length < 2) {
     errors.push('CSV file is empty or invalid');
@@ -88,8 +102,9 @@ export function importFromCSV(csvContent: string): ImportResult {
       if (fields.length === 0) continue;
 
       const entry: Omit<PasswordEntry, 'id' | 'createdAt' | 'updatedAt'> = {
+        type: 'password',
         title: fields[titleIndex] || `Entry ${i}`,
-        username: usernameIndex !== -1 ? fields[usernameIndex] : undefined,
+        username: usernameIndex !== -1 ? fields[usernameIndex] || '' : '',
         password: fields[passwordIndex] || '',
         url: urlIndex !== -1 ? fields[urlIndex] : undefined,
         notes: notesIndex !== -1 ? fields[notesIndex] : undefined
@@ -129,8 +144,8 @@ export function importFromJSON(jsonContent: string): ImportResult {
         continue;
       }
 
-      const title = item.title || item.name || item.account;
-      const password = item.password || item.pass;
+      const title = asString(item.title) || asString(item.name) || asString(item.account);
+      const password = asString(item.password) || asString(item.pass);
 
       if (!password) {
         errors.push(`Entry ${i + 1}: Missing password, skipping`);
@@ -138,11 +153,12 @@ export function importFromJSON(jsonContent: string): ImportResult {
       }
 
       entries.push({
+        type: 'password',
         title: title || `Entry ${i + 1}`,
-        username: item.username || item.user || item.login || item.email,
+        username: asString(item.username) || asString(item.user) || asString(item.login) || asString(item.email),
         password,
-        url: item.url || item.website || item.site,
-        notes: item.notes || item.note || item.comment
+        url: asString(item.url) || asString(item.website) || asString(item.site) || undefined,
+        notes: asString(item.notes) || asString(item.note) || asString(item.comment) || undefined
       });
     }
   } catch (error) {
@@ -156,7 +172,7 @@ export function importFrom1Password(csvContent: string): ImportResult {
   const entries: Omit<PasswordEntry, 'id' | 'createdAt' | 'updatedAt'>[] = [];
   const errors: string[] = [];
 
-  const lines = csvContent.split('\n').filter(line => line.trim());
+  const lines = csvContent.replace(/\r\n?/g, '\n').split('\n').filter(line => line.trim());
 
   if (lines.length < 2) {
     errors.push('1Password CSV file is empty');
@@ -170,8 +186,9 @@ export function importFrom1Password(csvContent: string): ImportResult {
       if (fields.length < 4) continue;
 
       entries.push({
+        type: 'password',
         title: fields[0] || `Entry ${i}`,
-        username: fields[2] || undefined,
+        username: fields[2] || '',
         password: fields[3] || '',
         url: fields[1] || undefined,
         notes: fields[4] || undefined
@@ -188,7 +205,7 @@ export function importFromLastPass(csvContent: string): ImportResult {
   const entries: Omit<PasswordEntry, 'id' | 'createdAt' | 'updatedAt'>[] = [];
   const errors: string[] = [];
 
-  const lines = csvContent.split('\n').filter(line => line.trim());
+  const lines = csvContent.replace(/\r\n?/g, '\n').split('\n').filter(line => line.trim());
 
   if (lines.length < 2) {
     errors.push('LastPass CSV file is empty');
@@ -202,8 +219,9 @@ export function importFromLastPass(csvContent: string): ImportResult {
       if (fields.length < 4) continue;
 
       entries.push({
+        type: 'password',
         title: fields[4] || fields[1] || `Entry ${i}`,
-        username: fields[1] || undefined,
+        username: fields[1] || '',
         password: fields[2] || '',
         url: fields[0] || undefined,
         notes: fields[3] || undefined
@@ -222,21 +240,23 @@ export function importFromBitwarden(jsonContent: string): ImportResult {
 
   try {
     const data = JSON.parse(jsonContent);
-    const items = data.items || [];
+    const items: unknown[] = Array.isArray(data?.items) ? data.items : [];
 
     for (let i = 0; i < items.length; i++) {
-      const item = items[i];
+      const item = items[i] as Record<string, unknown> | null;
 
-      if (item.type !== 1) continue;
+      if (!item || typeof item !== 'object' || item.type !== 1) continue;
 
-      const login = item.login || {};
+      const login = (item.login && typeof item.login === 'object' ? item.login : {}) as Record<string, unknown>;
+      const firstUri = Array.isArray(login.uris) ? (login.uris[0] as Record<string, unknown> | undefined)?.uri : undefined;
 
       entries.push({
-        title: item.name || `Entry ${i + 1}`,
-        username: login.username || undefined,
-        password: login.password || '',
-        url: login.uris?.[0]?.uri || undefined,
-        notes: item.notes || undefined
+        type: 'password',
+        title: asString(item.name) || `Entry ${i + 1}`,
+        username: asString(login.username),
+        password: asString(login.password),
+        url: asString(firstUri) || undefined,
+        notes: asString(item.notes) || undefined
       });
     }
   } catch (error) {
@@ -250,7 +270,7 @@ export function importFromChrome(csvContent: string): ImportResult {
   const entries: Omit<PasswordEntry, 'id' | 'createdAt' | 'updatedAt'>[] = [];
   const errors: string[] = [];
 
-  const lines = csvContent.split('\n').filter(line => line.trim());
+  const lines = csvContent.replace(/\r\n?/g, '\n').split('\n').filter(line => line.trim());
 
   if (lines.length < 2) {
     errors.push('Chrome CSV file is empty');
@@ -267,8 +287,9 @@ export function importFromChrome(csvContent: string): ImportResult {
       const hostname = url ? new URL(url).hostname : `Entry ${i}`;
 
       entries.push({
+        type: 'password',
         title: hostname,
-        username: fields[1] || undefined,
+        username: fields[1] || '',
         password: fields[2] || '',
         url: url || undefined,
         notes: undefined

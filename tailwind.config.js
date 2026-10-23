@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 const c = (v) => `rgb(var(${v}) / <alpha-value>)`;
+const SANS = ['"Google Sans"', '"Product Sans"', 'ui-sans-serif', 'system-ui', '-apple-system', '"Segoe UI"', 'Roboto', 'Helvetica', 'Arial', 'sans-serif'];
 
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
@@ -7,7 +8,7 @@ export default {
   theme: {
     extend: {
       colors: {
-        // Semantic tokens (Graphite & Brass system)
+        // Semantic tokens (Vexel navy system)
         bg: c('--bg'),
         'bg-deep': c('--bg-deep'),
         surface: c('--surface'),
@@ -21,6 +22,11 @@ export default {
         danger: c('--danger'),
         success: c('--success'),
         slate: c('--slate'),
+        warn: c('--warn'),
+        btn: c('--btn'),
+        'btn-ink': c('--btn-ink'),
+        'btn-hover': c('--btn-hover'),
+        focus: c('--focus'),
 
         // Back-compat aliases so existing markup restyles automatically
         vault: {
@@ -53,13 +59,29 @@ export default {
         },
       },
       fontFamily: {
-        display: ['"Space Grotesk"', 'system-ui', 'sans-serif'],
-        sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'Fira Code', 'monospace'],
+        display: SANS,
+        sans: SANS,
+        mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', '"Liberation Mono"', 'monospace'],
+      },
+      // Only Google Sans 400 and 500 ship; heavier weights would be faux-bolded.
+      fontWeight: {
+        semibold: '500',
+        bold: '500',
+        extrabold: '500',
+      },
+      borderRadius: {
+        sm: '3px',
+        DEFAULT: '4px',
+        md: '4.5px',
+        lg: '6px',
+        xl: '8px',
+        '2xl': '10px',
+        '3xl': '14px',
       },
       backgroundImage: {
         'ai-gradient': 'linear-gradient(135deg, rgb(var(--bg)) 0%, rgb(var(--surface)) 100%)',
         'ai-radial': 'radial-gradient(ellipse at center, rgb(var(--accent) / 0.10) 0%, transparent 70%)',
+        sky: 'var(--sky)',
         'neon-glow': 'linear-gradient(135deg, rgb(var(--accent) / 0.10) 0%, rgb(var(--accent-2) / 0.08) 100%)',
         'glass-gradient': 'linear-gradient(135deg, rgb(255 255 255 / 0.04) 0%, rgb(255 255 255 / 0.01) 100%)',
       },
@@ -68,6 +90,7 @@ export default {
         'neon-blue': '0 0 0 1px rgb(var(--accent-2) / 0.25), 0 10px 30px -12px rgb(var(--accent-2) / 0.3)',
         'neon-purple': '0 0 0 1px rgb(var(--slate) / 0.25), 0 10px 30px -12px rgb(var(--slate) / 0.3)',
         glass: '0 12px 40px -18px rgb(0 0 0 / 0.65), inset 0 1px 0 rgb(255 255 255 / 0.04)',
+        halo: '0 0 0 4px rgb(120 200 255 / 0.12)',
         'glass-hover': '0 18px 50px -20px rgb(0 0 0 / 0.7), inset 0 1px 0 rgb(255 255 255 / 0.06)',
         'card-3d': '0 20px 60px -24px rgb(0 0 0 / 0.6)',
         soft: '0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px -16px rgb(0 0 0 / 0.5)',
